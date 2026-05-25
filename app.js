@@ -1,4 +1,7 @@
+import { firebaseConfig, firebaseIsConfigured } from "./firebase-config.js";
+
 const STORAGE_KEY = "i-expense-pwa-v1";
+const FIREBASE_SDK_VERSION = "12.7.0";
 
 const categories = [
   { id: "food", name: "餐飲", type: "expense", emoji: "🍜", color: "#e65f63", keywords: ["午餐", "早餐", "晚餐", "飯", "食", "吃", "咖啡", "飲料", "餐廳", "便當", "麵", "超商", "711", "全家", "甜點", "奶茶", "火鍋"] },
@@ -20,7 +23,20 @@ const state = {
   selectedMonth: startOfMonth(new Date()),
   currentTab: "home",
   statsMode: "category",
-  deferredInstallPrompt: null
+  deferredInstallPrompt: null,
+  syncStatus: firebaseIsConfigured ? "準備連線" : "尚未設定 Firebase",
+  authLabel: "本機",
+  user: null
+};
+
+const cloud = {
+  auth: null,
+  db: null,
+  provider: null,
+  unsubscribe: null,
+  modules: null,
+  ready: false,
+  syncing: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -51,7 +67,12 @@ const els = {
   noteInput: $("#noteInput"),
   dateInput: $("#dateInput"),
   deleteEntry: $("#deleteEntry"),
-  installButton: $("#installButton")
+  installButton: $("#installButton"),
+  authStatus: $("#authStatus"),
+  syncStatus: $("#syncStatus"),
+  signInButton: $("#signInButton"),
+  signOutButton: $("#signOutButton"),
+  syncNowButton: $("#syncNowButton")
 };
 
 init();
@@ -66,6 +87,8 @@ function init() {
   bindEvents();
   hydrateCategoryOptions("expense");
   render();
+  updateSyncUI();
+  initFirebaseSync();
   registerServiceWorker();
 }
 
@@ -111,6 +134,9 @@ function bindEvents() {
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#importJson").addEventListener("change", importJson);
   $("#clearData").addEventListener("click", clearData);
+  els.signInButton?.addEventListener("click", signInWithGoogle);
+  els.signOutButton?.addEventListener("click", signOutFromCloud);
+  els.syncNowButton?.addEventListener("click", syncAllToCloud);
 
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
@@ -329,7 +355,8 @@ function saveEntry(event) {
     category: els.categoryInput.value,
     note: els.noteInput.value.trim(),
     date: new Date(els.dateInput.value).toISOString(),
-    isIncome: entryType() === "income"
+    isIncome: entryType() === "income",
+    updatedAt: Date.now()
   };
 
   const index = state.expenses.findIndex((item) => item.id === id);
@@ -340,6 +367,7 @@ function saveEntry(event) {
   }
 
   persist();
+  upsertCloudExpense(next);
   closeDialog();
   render();
 }
@@ -351,6 +379,7 @@ function deleteEntry() {
   if (!ok) return;
   state.expenses = state.expenses.filter((item) => item.id !== id);
   persist();
+  deleteCloudExpense(id);
   closeDialog();
   render();
 }
@@ -503,7 +532,7 @@ function loadExpenses() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeStoredExpense) : [];
   } catch {
     return [];
   }
@@ -511,6 +540,24 @@ function loadExpenses() {
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.expenses));
+}
+
+function replaceExpenses(expenses) {
+  state.expenses = expenses.map(normalizeStoredExpense).sort((a, b) => new Date(b.date) - new Date(a.date));
+  persist();
+  render();
+}
+
+function normalizeStoredExpense(item) {
+  return {
+    id: item.id || makeId(),
+    amount: Number(item.amount || 0),
+    category: normalizeCategory(item.category),
+    note: String(item.note || ""),
+    date: new Date(item.date || Date.now()).toISOString(),
+    isIncome: Boolean(item.isIncome),
+    updatedAt: Number(item.updatedAt || 0) || Date.now()
+  };
 }
 
 function exportJson() {
@@ -555,10 +602,12 @@ function importJson(event) {
           category: normalizeCategory(item.category),
           note: String(item.note || ""),
           date: new Date(item.date).toISOString(),
-          isIncome: Boolean(item.isIncome)
+          isIncome: Boolean(item.isIncome),
+          updatedAt: Number(item.updatedAt || 0) || Date.now()
         }));
       state.expenses = mergeExpenses(state.expenses, normalized);
       persist();
+      syncAllToCloud();
       render();
     } catch {
       window.alert("匯入失敗，檔案格式不正確。");
@@ -570,8 +619,14 @@ function importJson(event) {
 }
 
 function mergeExpenses(current, imported) {
-  const byId = new Map(current.map((item) => [item.id, item]));
-  imported.forEach((item) => byId.set(item.id, item));
+  const byId = new Map(current.map((item) => [item.id, normalizeStoredExpense(item)]));
+  imported.forEach((item) => {
+    const normalized = normalizeStoredExpense(item);
+    const existing = byId.get(normalized.id);
+    if (!existing || normalized.updatedAt >= existing.updatedAt) {
+      byId.set(normalized.id, normalized);
+    }
+  });
   return Array.from(byId.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
@@ -580,7 +635,185 @@ function clearData() {
   if (!ok) return;
   state.expenses = [];
   persist();
+  clearCloudExpenses();
   render();
+}
+
+async function initFirebaseSync() {
+  if (!firebaseIsConfigured) {
+    state.syncStatus = "請先填寫 firebase-config.js";
+    updateSyncUI();
+    return;
+  }
+
+  try {
+    state.syncStatus = "載入 Firebase...";
+    updateSyncUI();
+
+    const [appModule, authModule, firestoreModule] = await Promise.all([
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth.js`),
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
+    ]);
+
+    const app = appModule.initializeApp(firebaseConfig);
+    cloud.auth = authModule.getAuth(app);
+    cloud.db = firestoreModule.getFirestore(app);
+    cloud.provider = new authModule.GoogleAuthProvider();
+    cloud.modules = { authModule, firestoreModule };
+    cloud.ready = true;
+
+    await authModule.getRedirectResult(cloud.auth).catch(() => null);
+
+    authModule.onAuthStateChanged(cloud.auth, async (user) => {
+      if (!user) {
+        state.user = null;
+        state.authLabel = "本機";
+        state.syncStatus = "未登入，資料只存在此裝置";
+        if (cloud.unsubscribe) cloud.unsubscribe();
+        cloud.unsubscribe = null;
+        updateSyncUI();
+        return;
+      }
+
+      state.user = user;
+      state.authLabel = user.displayName || user.email || "已登入";
+      state.syncStatus = "合併雲端資料...";
+      updateSyncUI();
+      await mergeRemoteAndLocal();
+      subscribeRemoteExpenses();
+      state.syncStatus = "雲端同步中";
+      updateSyncUI();
+    });
+  } catch (error) {
+    state.syncStatus = `Firebase 初始化失敗：${error.message}`;
+    updateSyncUI();
+  }
+}
+
+async function signInWithGoogle() {
+  if (!cloud.ready) {
+    window.alert("Firebase 尚未設定。請先在 firebase-config.js 填入專案設定。");
+    return;
+  }
+  try {
+    state.syncStatus = "開啟 Google 登入...";
+    updateSyncUI();
+    await cloud.modules.authModule.signInWithPopup(cloud.auth, cloud.provider);
+  } catch {
+    await cloud.modules.authModule.signInWithRedirect(cloud.auth, cloud.provider);
+  }
+}
+
+async function signOutFromCloud() {
+  if (!cloud.ready) return;
+  await cloud.modules.authModule.signOut(cloud.auth);
+}
+
+async function mergeRemoteAndLocal() {
+  if (!state.user) return;
+  const remote = await readRemoteExpenses();
+  const merged = mergeExpenses(state.expenses, remote);
+  replaceExpenses(merged);
+  await writeAllRemote(merged);
+}
+
+async function readRemoteExpenses() {
+  const { collection, getDocs } = cloud.modules.firestoreModule;
+  const snapshot = await getDocs(collection(cloud.db, "users", state.user.uid, "expenses"));
+  return snapshot.docs.map((docSnap) => normalizeStoredExpense({ id: docSnap.id, ...docSnap.data() }));
+}
+
+function subscribeRemoteExpenses() {
+  if (!state.user) return;
+  if (cloud.unsubscribe) cloud.unsubscribe();
+  const { collection, onSnapshot } = cloud.modules.firestoreModule;
+  cloud.unsubscribe = onSnapshot(
+    collection(cloud.db, "users", state.user.uid, "expenses"),
+    (snapshot) => {
+      if (cloud.syncing) return;
+      replaceExpenses(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+      state.syncStatus = `已同步 ${state.expenses.length} 筆`;
+      updateSyncUI();
+    },
+    (error) => {
+      state.syncStatus = `同步失敗：${error.message}`;
+      updateSyncUI();
+    }
+  );
+}
+
+async function syncAllToCloud() {
+  if (!state.user) return;
+  state.syncStatus = "上傳本機資料...";
+  updateSyncUI();
+  await writeAllRemote(state.expenses);
+  state.syncStatus = `已同步 ${state.expenses.length} 筆`;
+  updateSyncUI();
+}
+
+async function writeAllRemote(expenses) {
+  if (!state.user) return;
+  const { writeBatch, doc } = cloud.modules.firestoreModule;
+  const batch = writeBatch(cloud.db);
+  expenses.map(normalizeStoredExpense).forEach((expense) => {
+    batch.set(doc(cloud.db, "users", state.user.uid, "expenses", expense.id), expense);
+  });
+  cloud.syncing = true;
+  try {
+    await batch.commit();
+  } finally {
+    cloud.syncing = false;
+  }
+}
+
+async function upsertCloudExpense(expense) {
+  if (!state.user) return;
+  const { doc, setDoc } = cloud.modules.firestoreModule;
+  cloud.syncing = true;
+  try {
+    await setDoc(doc(cloud.db, "users", state.user.uid, "expenses", expense.id), normalizeStoredExpense(expense));
+    state.syncStatus = "已同步";
+  } catch (error) {
+    state.syncStatus = `同步失敗：${error.message}`;
+  } finally {
+    cloud.syncing = false;
+    updateSyncUI();
+  }
+}
+
+async function deleteCloudExpense(id) {
+  if (!state.user) return;
+  const { doc, deleteDoc } = cloud.modules.firestoreModule;
+  await deleteDoc(doc(cloud.db, "users", state.user.uid, "expenses", id)).catch((error) => {
+    state.syncStatus = `刪除雲端資料失敗：${error.message}`;
+    updateSyncUI();
+  });
+}
+
+async function clearCloudExpenses() {
+  if (!state.user) return;
+  const remote = await readRemoteExpenses();
+  const { writeBatch, doc } = cloud.modules.firestoreModule;
+  const batch = writeBatch(cloud.db);
+  remote.forEach((expense) => {
+    batch.delete(doc(cloud.db, "users", state.user.uid, "expenses", expense.id));
+  });
+  await batch.commit().catch((error) => {
+    state.syncStatus = `清除雲端資料失敗：${error.message}`;
+    updateSyncUI();
+  });
+}
+
+function updateSyncUI() {
+  if (els.authStatus) els.authStatus.textContent = state.authLabel;
+  if (els.syncStatus) els.syncStatus.textContent = state.syncStatus;
+  if (els.signInButton) {
+    els.signInButton.disabled = !firebaseIsConfigured || Boolean(state.user);
+    els.signInButton.hidden = Boolean(state.user);
+  }
+  if (els.signOutButton) els.signOutButton.hidden = !state.user;
+  if (els.syncNowButton) els.syncNowButton.disabled = !state.user;
 }
 
 function download(filename, content, type) {

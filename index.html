@@ -94,6 +94,18 @@
             <h2 id="settingsTitle">設定</h2>
           </div>
           <section class="settings-list">
+            <div class="settings-row auth-row">
+              <span>
+                <span class="settings-title-line">雲端同步</span>
+                <small id="syncStatus">尚未設定 Firebase</small>
+              </span>
+              <strong id="authStatus">本機</strong>
+            </div>
+            <div class="settings-actions">
+              <button id="signInButton" class="secondary-action" type="button">Google 登入</button>
+              <button id="syncNowButton" class="secondary-action" type="button" disabled>立即同步</button>
+              <button id="signOutButton" class="secondary-action danger-action" type="button" hidden>登出</button>
+            </div>
             <button id="exportJson" class="settings-row" type="button">
               <span>匯出備份</span>
               <strong>JSON</strong>

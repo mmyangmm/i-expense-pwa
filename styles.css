@@ -459,6 +459,50 @@ h1 {
   text-align: left;
 }
 
+.auth-row {
+  align-items: flex-start;
+}
+
+.settings-title-line {
+  display: block;
+}
+
+.settings-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.secondary-action {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.secondary-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.danger-action {
+  color: var(--danger);
+}
+
 .settings-row:last-child {
   border-bottom: 0;
 }
@@ -672,5 +716,9 @@ dialog::backdrop {
   .bar-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .settings-actions {
+    grid-template-columns: 1fr;
   }
 }
