@@ -98,79 +98,16 @@
             <div class="tool-panel">
               <div class="tool-head">
                 <div>
-                  <h3>出國模式</h3>
-                  <p id="travelRateStatus">以台幣記帳</p>
-                </div>
-                <label class="switch">
-                  <input id="travelEnabled" type="checkbox">
-                  <span></span>
-                </label>
-              </div>
-              <div class="tool-grid">
-                <label class="mini-field">
-                  <span>旅遊幣別</span>
-                  <select id="travelCurrency"></select>
-                </label>
-                <button id="refreshTravelRate" class="secondary-action" type="button">更新匯率</button>
-              </div>
-            </div>
-
-            <div class="tool-panel">
-              <div class="tool-head">
-                <div>
                   <h3>匯率換算</h3>
                   <p id="converterStatus">可離線使用近似匯率</p>
                 </div>
-              </div>
-              <div class="converter-grid">
-                <label class="mini-field">
-                  <span>金額</span>
-                  <input id="converterAmount" inputmode="decimal" value="1000">
-                </label>
-                <label class="mini-field">
-                  <span>從</span>
-                  <select id="converterFrom"></select>
-                </label>
-                <label class="mini-field">
-                  <span>到</span>
-                  <select id="converterTo"></select>
-                </label>
-              </div>
-              <div class="result-box" id="converterResult">NT$0</div>
-            </div>
-
-            <div class="tool-panel">
-              <div class="tool-head">
-                <div>
-                  <h3>語音快速記帳</h3>
-                  <p id="voiceStatus">可說或貼上「午餐 120」這類文字</p>
+                <div class="tool-actions">
+                  <button id="refreshConverterRates" class="icon-chip" type="button" aria-label="更新匯率">↻</button>
+                  <button id="manageCurrencies" class="icon-chip" type="button" aria-label="管理幣別">☰</button>
                 </div>
               </div>
-              <textarea id="voiceText" class="tool-textarea" rows="2" placeholder="例如：午餐 120 元、薪資 30000"></textarea>
-              <div class="tool-grid">
-                <button id="voiceButton" class="secondary-action" type="button">開始語音</button>
-                <button id="parseVoiceButton" class="secondary-action" type="button">解析成記帳</button>
-              </div>
-            </div>
-
-            <div class="tool-panel">
-              <div class="tool-head">
-                <div>
-                  <h3>每日提醒</h3>
-                  <p id="reminderStatus">提醒會在 PWA 開啟時檢查</p>
-                </div>
-                <label class="switch">
-                  <input id="reminderEnabled" type="checkbox">
-                  <span></span>
-                </label>
-              </div>
-              <div class="tool-grid">
-                <label class="mini-field">
-                  <span>提醒時間</span>
-                  <input id="reminderTime" type="time">
-                </label>
-                <button id="requestNotification" class="secondary-action" type="button">通知權限</button>
-              </div>
+              <div id="converterList" class="converter-list"></div>
+              <div id="converterPad" class="converter-pad" aria-label="換匯數字鍵盤"></div>
             </div>
           </section>
         </section>
@@ -206,6 +143,40 @@
               </span>
               <div id="iconOptions" class="option-grid icon-options" role="radiogroup" aria-label="App 圖示"></div>
             </div>
+            <div class="settings-row reminder-row">
+              <span>
+                <span class="settings-title-line">每日記帳提醒</span>
+                <small id="reminderStatus">提醒已關閉</small>
+              </span>
+              <label class="switch">
+                <input id="reminderEnabled" type="checkbox">
+                <span></span>
+              </label>
+            </div>
+            <div class="settings-actions reminder-actions">
+              <label class="mini-field">
+                <span>提醒時間</span>
+                <input id="reminderTime" type="time">
+              </label>
+              <button id="requestNotification" class="secondary-action" type="button">通知權限</button>
+            </div>
+            <div class="settings-row travel-row">
+              <span>
+                <span class="settings-title-line">✈️ 出國模式</span>
+                <small id="travelRateStatus">以台幣記帳</small>
+              </span>
+              <label class="switch">
+                <input id="travelEnabled" type="checkbox">
+                <span></span>
+              </label>
+            </div>
+            <div class="settings-actions travel-actions">
+              <label class="mini-field">
+                <span>旅遊幣別</span>
+                <select id="travelCurrency"></select>
+              </label>
+              <button id="refreshTravelRate" class="secondary-action" type="button">重新整理匯率</button>
+            </div>
             <button id="exportJson" class="settings-row" type="button">
               <span>匯出備份</span>
               <strong>JSON</strong>
@@ -231,7 +202,7 @@
         </section>
       </main>
 
-      <button class="fab" id="addButton" type="button">＋</button>
+      <button class="fab" id="addButton" type="button">記帳</button>
 
       <nav class="tabbar" aria-label="主要分頁">
         <button class="tab active" data-tab="home" type="button">⌂<span>首頁</span></button>
@@ -283,7 +254,38 @@
           <input id="dateInput" type="datetime-local" required>
         </label>
 
+        <section class="quick-voice">
+          <div>
+            <strong>語音快速記帳</strong>
+            <small id="voiceStatus">可說或貼上「午餐 120」這類文字</small>
+          </div>
+          <textarea id="voiceText" class="tool-textarea" rows="2" placeholder="例如：午餐 120 元、薪資 30000"></textarea>
+          <div class="quick-actions">
+            <button id="parseVoiceButton" class="action-pill parse-pill" type="button">解析</button>
+            <button id="voiceButton" class="action-pill mic-pill" type="button">語音</button>
+          </div>
+        </section>
+
         <button class="delete-button" id="deleteEntry" type="button" hidden>刪除此筆</button>
+      </form>
+    </dialog>
+
+    <dialog id="currencyDialog">
+      <form method="dialog" class="currency-manager">
+        <div class="dialog-head">
+          <button class="icon-button" id="closeCurrencyDialog" value="cancel" type="button" aria-label="關閉">×</button>
+          <h2>管理幣別</h2>
+          <button class="save-button" value="default" type="submit">完成</button>
+        </div>
+        <section class="manager-section">
+          <h3>顯示中</h3>
+          <p>至少保留 2 個幣別；點選換匯列表可改基準幣別。</p>
+          <div id="selectedCurrencyList" class="currency-manager-list"></div>
+        </section>
+        <section class="manager-section">
+          <h3>新增幣別</h3>
+          <div id="availableCurrencyList" class="currency-manager-list"></div>
+        </section>
       </form>
     </dialog>
 
@@ -294,6 +296,6 @@
       </div>
     </template>
 
-    <script src="./app.js?v=appearance1" type="module"></script>
+    <script src="./app.js?v=ux2" type="module"></script>
   </body>
 </html>

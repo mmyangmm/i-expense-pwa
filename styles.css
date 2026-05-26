@@ -529,6 +529,24 @@ h1 {
   font-size: 12px;
 }
 
+.tool-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.icon-chip {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--primary);
+  font-weight: 900;
+}
+
 .tool-grid,
 .converter-grid {
   display: grid;
@@ -576,6 +594,158 @@ h1 {
   color: var(--text);
   font-size: 22px;
   font-weight: 850;
+}
+
+.converter-list {
+  display: grid;
+  gap: 8px;
+}
+
+.converter-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(96px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 4px 12px rgb(22 56 50 / 4%);
+}
+
+.converter-row.active {
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+}
+
+.converter-flag {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.emoji-flag {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.taiwan-flag {
+  position: relative;
+  width: 32px;
+  height: 22px;
+  display: inline-block;
+  vertical-align: -5px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #fe0000;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 10%);
+}
+
+.taiwan-flag > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 12px;
+  background: #000095;
+}
+
+.taiwan-flag > span::after {
+  content: "✹";
+  position: absolute;
+  inset: -1px 0 0;
+  color: #fff;
+  font-size: 9px;
+  line-height: 12px;
+  text-align: center;
+}
+
+.converter-meta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.converter-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.converter-meta em {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-style: normal;
+  font-size: 10px;
+}
+
+.converter-meta small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.converter-value {
+  min-width: 0;
+  color: var(--text);
+  font-size: 23px;
+  font-weight: 900;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.converter-row.active .converter-value {
+  color: var(--primary);
+}
+
+.converter-pad {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.converter-pad-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.converter-pad-row:last-child {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.converter-pad button {
+  min-height: 48px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 21px;
+  font-weight: 800;
+  box-shadow: 0 3px 10px rgb(22 56 50 / 5%);
+}
+
+.converter-pad .clear-key {
+  color: #c47724;
+  background: rgb(255 142 83 / 14%);
+}
+
+.converter-pad .delete-key {
+  color: var(--danger);
+  background: rgb(214 75 75 / 10%);
 }
 
 .switch {
@@ -670,6 +840,16 @@ h1 {
   padding: 12px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+}
+
+.reminder-actions,
+.travel-actions {
+  grid-template-columns: minmax(0, 1fr) minmax(116px, auto);
+  align-items: end;
+}
+
+.reminder-actions:has(button[hidden]) {
+  grid-template-columns: 1fr;
 }
 
 .secondary-action {
@@ -798,13 +978,15 @@ h1 {
   left: 50%;
   bottom: calc(72px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  width: 62px;
-  height: 62px;
+  min-width: 118px;
+  height: 54px;
+  padding: 0 30px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 999px;
   background: linear-gradient(135deg, var(--primary), var(--primary-2));
   color: #fff;
-  font-size: 34px;
+  font-size: 17px;
+  font-weight: 900;
   line-height: 1;
   box-shadow: 0 18px 32px rgb(47 143 131 / 32%);
   z-index: 5;
@@ -957,6 +1139,55 @@ dialog::backdrop {
   font-size: 12px;
 }
 
+.quick-voice {
+  display: grid;
+  gap: 10px;
+  margin: 16px 14px 8px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.quick-voice strong {
+  display: block;
+  color: var(--text);
+}
+
+.quick-voice small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.action-pill {
+  min-height: 46px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgb(22 56 50 / 10%);
+}
+
+.parse-pill {
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+}
+
+.mic-pill {
+  background: linear-gradient(135deg, #4ecdc4, #44cf6c);
+}
+
+.mic-pill.recording {
+  background: linear-gradient(135deg, #d64b4b, #ff6b9d);
+}
+
 .delete-button {
   width: calc(100% - 28px);
   min-height: 48px;
@@ -965,6 +1196,74 @@ dialog::backdrop {
   border-radius: 8px;
   background: rgb(214 75 75 / 8%);
   font-weight: 800;
+}
+
+.currency-manager {
+  padding-bottom: 14px;
+}
+
+.manager-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.manager-section + .manager-section {
+  border-top: 1px solid var(--border);
+}
+
+.manager-section h3 {
+  font-size: 16px;
+}
+
+.manager-section p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.currency-manager-list {
+  display: grid;
+  gap: 8px;
+}
+
+.currency-manager-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.manager-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.manager-controls button,
+.add-currency {
+  min-width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--primary);
+  font-weight: 900;
+}
+
+.manager-controls button:disabled {
+  opacity: 0.32;
+}
+
+.empty-manager {
+  padding: 18px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  text-align: center;
+  font-weight: 700;
 }
 
 @media (max-width: 420px) {
@@ -1005,6 +1304,21 @@ dialog::backdrop {
 
   .converter-grid,
   .tool-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .converter-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .converter-value {
+    grid-column: 1 / -1;
+    text-align: left;
+    font-size: 24px;
+  }
+
+  .reminder-actions,
+  .travel-actions {
     grid-template-columns: 1fr;
   }
 }

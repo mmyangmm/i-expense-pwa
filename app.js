@@ -35,10 +35,22 @@ const travelCurrencies = [
   { code: "THB", name: "泰銖", flag: "🇹🇭", symbol: "฿" },
   { code: "AUD", name: "澳幣", flag: "🇦🇺", symbol: "A$" },
   { code: "CAD", name: "加幣", flag: "🇨🇦", symbol: "C$" },
+  { code: "NZD", name: "紐西蘭幣", flag: "🇳🇿", symbol: "NZ$" },
   { code: "MYR", name: "馬幣", flag: "🇲🇾", symbol: "RM" },
   { code: "IDR", name: "印尼盾", flag: "🇮🇩", symbol: "Rp" },
   { code: "PHP", name: "菲律賓披索", flag: "🇵🇭", symbol: "₱" },
-  { code: "VND", name: "越南盾", flag: "🇻🇳", symbol: "₫" }
+  { code: "VND", name: "越南盾", flag: "🇻🇳", symbol: "₫" },
+  { code: "INR", name: "印度盧比", flag: "🇮🇳", symbol: "₹" },
+  { code: "AED", name: "阿聯迪拉姆", flag: "🇦🇪", symbol: "د.إ" },
+  { code: "SEK", name: "瑞典克朗", flag: "🇸🇪", symbol: "kr" },
+  { code: "NOK", name: "挪威克朗", flag: "🇳🇴", symbol: "kr" },
+  { code: "DKK", name: "丹麥克朗", flag: "🇩🇰", symbol: "kr" },
+  { code: "PLN", name: "波蘭茲羅提", flag: "🇵🇱", symbol: "zł" },
+  { code: "CZK", name: "捷克克朗", flag: "🇨🇿", symbol: "Kč" },
+  { code: "TRY", name: "土耳其里拉", flag: "🇹🇷", symbol: "₺" },
+  { code: "ZAR", name: "南非蘭特", flag: "🇿🇦", symbol: "R" },
+  { code: "MXN", name: "墨西哥披索", flag: "🇲🇽", symbol: "Mex$" },
+  { code: "BRL", name: "巴西雷亞爾", flag: "🇧🇷", symbol: "R$" }
 ];
 
 const fallbackRatesToTwd = {
@@ -56,10 +68,22 @@ const fallbackRatesToTwd = {
   THB: 0.91,
   AUD: 21.5,
   CAD: 23.5,
+  NZD: 19.7,
   MYR: 7.3,
   IDR: 0.0021,
   PHP: 0.56,
-  VND: 0.0013
+  VND: 0.0013,
+  INR: 0.39,
+  AED: 8.85,
+  SEK: 3.05,
+  NOK: 3.08,
+  DKK: 4.75,
+  PLN: 8.3,
+  CZK: 1.45,
+  TRY: 1.0,
+  ZAR: 1.8,
+  MXN: 1.75,
+  BRL: 6.1
 };
 
 const backgroundStyles = [
@@ -155,11 +179,15 @@ const els = {
   travelCurrency: $("#travelCurrency"),
   travelRateStatus: $("#travelRateStatus"),
   refreshTravelRate: $("#refreshTravelRate"),
-  converterAmount: $("#converterAmount"),
-  converterFrom: $("#converterFrom"),
-  converterTo: $("#converterTo"),
   converterStatus: $("#converterStatus"),
-  converterResult: $("#converterResult"),
+  converterList: $("#converterList"),
+  converterPad: $("#converterPad"),
+  refreshConverterRates: $("#refreshConverterRates"),
+  manageCurrencies: $("#manageCurrencies"),
+  currencyDialog: $("#currencyDialog"),
+  closeCurrencyDialog: $("#closeCurrencyDialog"),
+  selectedCurrencyList: $("#selectedCurrencyList"),
+  availableCurrencyList: $("#availableCurrencyList"),
   voiceButton: $("#voiceButton"),
   voiceText: $("#voiceText"),
   voiceStatus: $("#voiceStatus"),
@@ -198,6 +226,7 @@ function init() {
   updateToolsUI();
   initFirebaseSync();
   startReminderChecker();
+  if (!state.settings.converterRateUpdatedAt) fetchConverterRates();
   registerServiceWorker();
 }
 
@@ -283,9 +312,28 @@ function bindEvents() {
     updateToolsUI();
   });
   els.refreshTravelRate?.addEventListener("click", fetchTravelRate);
-  [els.converterAmount, els.converterFrom, els.converterTo].forEach((element) => {
-    element?.addEventListener("input", updateConverter);
-    element?.addEventListener("change", updateConverter);
+  els.refreshConverterRates?.addEventListener("click", () => fetchConverterRates());
+  els.manageCurrencies?.addEventListener("click", openCurrencyManager);
+  els.closeCurrencyDialog?.addEventListener("click", () => els.currencyDialog?.close());
+  els.converterList?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-converter-code]");
+    if (!row) return;
+    switchConverterBase(row.dataset.converterCode);
+  });
+  els.converterPad?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-converter-key]");
+    if (!button) return;
+    handleConverterKey(button.dataset.converterKey);
+  });
+  els.selectedCurrencyList?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-currency-action]");
+    if (!button) return;
+    updateConverterCurrencyOrder(button.dataset.currencyAction, button.dataset.currencyCode);
+  });
+  els.availableCurrencyList?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-currency-add]");
+    if (!button) return;
+    addConverterCurrency(button.dataset.currencyAdd);
   });
   els.voiceButton?.addEventListener("click", toggleVoiceInput);
   els.parseVoiceButton?.addEventListener("click", parseVoiceDraft);
@@ -344,9 +392,7 @@ function applyAppIcon() {
 
 function hydrateCurrencyOptions() {
   const options = travelCurrencies.map((currency) => `<option value="${currency.code}">${currency.flag} ${currency.name} (${currency.code})</option>`).join("");
-  [els.travelCurrency, els.converterFrom, els.converterTo].forEach((select) => {
-    if (select) select.innerHTML = options;
-  });
+  if (els.travelCurrency) els.travelCurrency.innerHTML = options;
 }
 
 function hydrateSettingsControls() {
@@ -354,9 +400,6 @@ function hydrateSettingsControls() {
   renderAppearanceOptions();
   if (els.travelEnabled) els.travelEnabled.checked = state.settings.travelEnabled;
   if (els.travelCurrency) els.travelCurrency.value = state.settings.travelCurrency;
-  if (els.converterAmount) els.converterAmount.value = String(state.settings.converterAmount);
-  if (els.converterFrom) els.converterFrom.value = state.settings.converterFrom;
-  if (els.converterTo) els.converterTo.value = state.settings.converterTo;
   if (els.reminderEnabled) els.reminderEnabled.checked = state.settings.reminderEnabled;
   if (els.reminderTime) els.reminderTime.value = state.settings.reminderTime;
   setupVoiceUI();
@@ -402,7 +445,7 @@ function updateToolsUI() {
   if (els.travelEnabled) els.travelEnabled.checked = state.settings.travelEnabled;
   if (els.travelCurrency) els.travelCurrency.value = state.settings.travelCurrency;
   updateTravelStatus();
-  updateConverter();
+  renderConverter();
   updateReminderUI();
   updateEntryTravelUI();
 }
@@ -587,6 +630,8 @@ function openEntryDialog(id = "", draft = null) {
 function closeDialog() {
   els.dialog.close();
   els.entryForm.reset();
+  if (els.voiceText) els.voiceText.value = "";
+  if (els.voiceStatus) els.voiceStatus.textContent = "可說或貼上「午餐 120」這類文字";
 }
 
 function saveEntry(event) {
@@ -688,7 +733,8 @@ function toggleVoiceInput() {
   if (speechRecognition) {
     speechRecognition.stop();
     speechRecognition = null;
-    els.voiceButton.textContent = "開始語音";
+    els.voiceButton.textContent = "語音";
+    els.voiceButton.classList.remove("recording");
     els.voiceStatus.textContent = "已停止聽寫";
     return;
   }
@@ -697,7 +743,8 @@ function toggleVoiceInput() {
   speechRecognition.lang = "zh-TW";
   speechRecognition.interimResults = true;
   speechRecognition.continuous = false;
-  els.voiceButton.textContent = "停止語音";
+  els.voiceButton.textContent = "停止";
+  els.voiceButton.classList.add("recording");
   els.voiceStatus.textContent = "正在聽寫...";
 
   speechRecognition.onresult = (event) => {
@@ -712,7 +759,8 @@ function toggleVoiceInput() {
   };
   speechRecognition.onend = () => {
     speechRecognition = null;
-    els.voiceButton.textContent = "開始語音";
+    els.voiceButton.textContent = "語音";
+    els.voiceButton.classList.remove("recording");
   };
   speechRecognition.start();
 }
@@ -724,9 +772,20 @@ function parseVoiceDraft() {
     window.alert("請輸入像「午餐 120 元」或「薪資 30000」這樣的內容。");
     return;
   }
-  state.currentTab = "home";
-  renderTabs();
-  openEntryDialog("", draft);
+  applyVoiceDraftToEntry(draft);
+  if (els.voiceStatus) els.voiceStatus.textContent = "已解析，可確認後儲存";
+}
+
+function applyVoiceDraftToEntry(draft) {
+  if (!els.dialog.open) openEntryDialog("", draft);
+  els.amountInput.value = String(draft.amount);
+  els.noteInput.value = draft.note;
+  els.dateInput.value = toLocalInputValue(new Date(draft.date));
+  setEntryType(draft.isIncome ? "income" : "expense");
+  hydrateCategoryOptions(entryType());
+  els.categoryInput.value = draft.category;
+  inferCategoryFromNote();
+  updateEntryTravelUI();
 }
 
 function parseVoiceText(text) {
@@ -763,7 +822,7 @@ function updateTravelStatus() {
     els.travelRateStatus.textContent = "以台幣記帳";
     return;
   }
-  els.travelRateStatus.textContent = `${currency.flag} ${currency.code} 記帳，1 ${currency.code} ≈ NT$${formatRateValue(rateToTwd(currency.code))}`;
+  els.travelRateStatus.innerHTML = `${currencyFlagMarkup(currency)} ${currency.code} 記帳，1 ${currency.code} ≈ NT$${formatRateValue(rateToTwd(currency.code))}`;
 }
 
 async function fetchTravelRate() {
@@ -791,18 +850,202 @@ async function fetchTravelRate() {
   updateToolsUI();
 }
 
-function updateConverter() {
-  if (!els.converterResult) return;
-  const amount = Number((els.converterAmount?.value || "0").replace(/,/g, ""));
-  const from = els.converterFrom?.value || "JPY";
-  const to = els.converterTo?.value || "TWD";
-  state.settings.converterAmount = Number.isFinite(amount) ? amount : 0;
-  state.settings.converterFrom = from;
-  state.settings.converterTo = to;
+function renderConverter() {
+  if (!els.converterList || !els.converterPad) return;
+  const base = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
+  const amount = converterAmount();
+  const codes = converterCodes();
+
+  els.converterList.innerHTML = codes.map((code) => {
+    const currency = findCurrency(code);
+    const isBase = code === base;
+    const displayValue = isBase
+      ? state.settings.converterInput || "0"
+      : formatCurrencyValue(convertForConverter(amount, code), code);
+    return `
+      <button class="converter-row${isBase ? " active" : ""}" data-converter-code="${code}" type="button">
+        <span class="converter-flag">${currencyFlagMarkup(currency)}</span>
+        <span class="converter-meta">
+          <strong>${escapeHtml(currency.name)}</strong>
+          <small>${currency.code}</small>
+        </span>
+        <span class="converter-value">${escapeHtml(displayValue)}</span>
+      </button>
+    `;
+  }).join("");
+
+  els.converterPad.innerHTML = [
+    ["1", "2", "3"],
+    ["4", "5", "6"],
+    ["7", "8", "9"],
+    ["C", ".", "0", "⌫"]
+  ].map((row) => `
+    <div class="converter-pad-row">
+      ${row.map((key) => `<button class="${key === "C" ? "clear-key" : key === "⌫" ? "delete-key" : ""}" data-converter-key="${key}" type="button">${key}</button>`).join("")}
+    </div>
+  `).join("");
+
+  if (els.converterStatus) {
+    const stamp = state.settings.converterRateUpdatedAt
+      ? `更新於 ${formatShortDateTime(state.settings.converterRateUpdatedAt)}`
+      : "可離線使用近似匯率";
+    els.converterStatus.textContent = `${stamp} · 基準 ${base}`;
+  }
+}
+
+function converterCodes() {
+  const raw = Array.isArray(state.settings.converterCurrencies)
+    ? state.settings.converterCurrencies
+    : String(state.settings.converterCurrencies || "TWD,USD,JPY,EUR,CNY,HKD").split(",");
+  const base = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
+  const cleaned = [...new Set(raw.map(normalizeCurrencyCode).filter(Boolean))];
+  if (!cleaned.includes(base)) cleaned.unshift(base);
+  const valid = cleaned.filter((code) => travelCurrencies.some((currency) => currency.code === code));
+  return valid.length >= 2 ? valid : ["TWD", "USD", "JPY", "EUR", "CNY", "HKD"];
+}
+
+function persistConverterCodes(codes) {
+  state.settings.converterCurrencies = codes.filter((code, index, list) => list.indexOf(code) === index);
   persistSettings();
-  const converted = convertCurrency(state.settings.converterAmount, from, to);
-  els.converterResult.textContent = `${formatForeign(converted, to)} ${to}`;
-  if (els.converterStatus) els.converterStatus.textContent = `1 ${from} ≈ ${formatRateValue(convertCurrency(1, from, to))} ${to}`;
+}
+
+function converterAmount() {
+  const value = Number(String(state.settings.converterInput || "1").replace(/,/g, ""));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function convertForConverter(amount, code) {
+  const base = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
+  if (code === base) return amount;
+  const liveRate = state.settings.converterRatesBase === base
+    ? Number(state.settings.converterRates?.[code])
+    : 0;
+  if (Number.isFinite(liveRate) && liveRate > 0) return amount * liveRate;
+  return convertCurrency(amount, base, code);
+}
+
+function switchConverterBase(code) {
+  const nextBase = normalizeCurrencyCode(code);
+  const currentBase = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
+  if (!nextBase || nextBase === currentBase) return;
+  const converted = convertForConverter(converterAmount(), nextBase);
+  state.settings.converterBaseCurrency = nextBase;
+  state.settings.converterInput = formatPlainNumber(converted || 1);
+  persistSettings();
+  renderConverter();
+  fetchConverterRates(nextBase);
+}
+
+function handleConverterKey(key) {
+  let value = String(state.settings.converterInput || "");
+  if (key === "C") value = "";
+  else if (key === "⌫") value = value.slice(0, -1);
+  else if (key === ".") value = value.includes(".") ? value : `${value || "0"}.`;
+  else if (/^\d$/.test(key)) {
+    if (value === "0") value = key;
+    else if (value.length < 12) value += key;
+  }
+  state.settings.converterInput = value || "0";
+  persistSettings();
+  renderConverter();
+}
+
+async function fetchConverterRates(base = state.settings.converterBaseCurrency || "TWD") {
+  const normalizedBase = normalizeCurrencyCode(base);
+  if (!normalizedBase) return;
+  if (els.converterStatus) els.converterStatus.textContent = "匯率更新中...";
+  try {
+    const response = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(normalizedBase)}`);
+    if (!response.ok) throw new Error("rate fetch failed");
+    const data = await response.json();
+    const rates = Object.fromEntries(travelCurrencies.map((currency) => [currency.code, Number(data.rates?.[currency.code]) || 0]));
+    rates[normalizedBase] = 1;
+    state.settings.converterRatesBase = normalizedBase;
+    state.settings.converterRates = rates;
+    state.settings.converterRateUpdatedAt = new Date().toISOString();
+  } catch {
+    state.settings.converterRatesBase = normalizedBase;
+    state.settings.converterRates = Object.fromEntries(
+      travelCurrencies.map((currency) => [currency.code, convertCurrency(1, normalizedBase, currency.code)])
+    );
+    state.settings.converterRateUpdatedAt = new Date().toISOString();
+  }
+  persistSettings();
+  renderConverter();
+}
+
+function openCurrencyManager() {
+  renderCurrencyManager();
+  els.currencyDialog?.showModal();
+}
+
+function renderCurrencyManager() {
+  const codes = converterCodes();
+  const base = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
+  if (els.selectedCurrencyList) {
+    els.selectedCurrencyList.innerHTML = codes.map((code, index) => currencyManagerRow(findCurrency(code), {
+      selected: true,
+      base: code === base,
+      first: index === 0,
+      last: index === codes.length - 1,
+      removable: code !== base && codes.length > 2
+    })).join("");
+  }
+  if (els.availableCurrencyList) {
+    const available = travelCurrencies.filter((currency) => !codes.includes(currency.code));
+    els.availableCurrencyList.innerHTML = available.length
+      ? available.map((currency) => currencyManagerRow(currency, { selected: false })).join("")
+      : `<div class="empty-manager">所有幣別都已加入</div>`;
+  }
+}
+
+function currencyManagerRow(currency, options) {
+  if (!currency) return "";
+  const selectedControls = options.selected
+    ? `
+      <span class="manager-controls">
+        <button data-currency-action="up" data-currency-code="${currency.code}" type="button" ${options.first ? "disabled" : ""}>↑</button>
+        <button data-currency-action="down" data-currency-code="${currency.code}" type="button" ${options.last ? "disabled" : ""}>↓</button>
+        <button data-currency-action="remove" data-currency-code="${currency.code}" type="button" ${options.removable ? "" : "disabled"}>−</button>
+      </span>
+    `
+    : `<button class="add-currency" data-currency-add="${currency.code}" type="button">＋</button>`;
+  return `
+    <div class="currency-manager-row">
+      <span class="converter-flag">${currencyFlagMarkup(currency)}</span>
+      <span class="converter-meta">
+        <strong>${escapeHtml(currency.name)}${options.base ? " <em>基準</em>" : ""}</strong>
+        <small>${currency.code}</small>
+      </span>
+      ${selectedControls}
+    </div>
+  `;
+}
+
+function updateConverterCurrencyOrder(action, code) {
+  const codes = converterCodes();
+  const index = codes.indexOf(code);
+  if (index < 0) return;
+  if (action === "up" && index > 0) {
+    [codes[index - 1], codes[index]] = [codes[index], codes[index - 1]];
+  } else if (action === "down" && index < codes.length - 1) {
+    [codes[index + 1], codes[index]] = [codes[index], codes[index + 1]];
+  } else if (action === "remove" && code !== state.settings.converterBaseCurrency && codes.length > 2) {
+    codes.splice(index, 1);
+  }
+  persistConverterCodes(codes);
+  renderConverter();
+  renderCurrencyManager();
+}
+
+function addConverterCurrency(code) {
+  const normalized = normalizeCurrencyCode(code);
+  if (!normalized) return;
+  const codes = converterCodes();
+  if (!codes.includes(normalized)) codes.push(normalized);
+  persistConverterCodes(codes);
+  renderConverter();
+  renderCurrencyManager();
 }
 
 function updateReminderUI() {
@@ -810,8 +1053,11 @@ function updateReminderUI() {
   if (els.reminderEnabled) els.reminderEnabled.checked = state.settings.reminderEnabled;
   if (els.reminderTime) els.reminderTime.value = state.settings.reminderTime;
   const permission = "Notification" in window ? Notification.permission : "unsupported";
+  if (els.requestNotification) {
+    els.requestNotification.hidden = permission === "granted" || permission === "unsupported";
+  }
   els.reminderStatus.textContent = state.settings.reminderEnabled
-    ? `${state.settings.reminderTime} 提醒，通知權限：${permission}`
+    ? `${state.settings.reminderTime} 提醒${permission === "granted" ? "，通知已允許" : "，尚未允許通知"}`
     : "提醒已關閉";
 }
 
@@ -987,12 +1233,40 @@ function formatForeign(value, code) {
   }).format(value || 0);
 }
 
+function formatCurrencyValue(value, code) {
+  const currency = findCurrency(code);
+  return `${currency.symbol}${formatForeign(value, code)}`;
+}
+
 function formatRateValue(value) {
   const numeric = Number(value || 0);
   return new Intl.NumberFormat("zh-TW", {
     maximumFractionDigits: numeric > 0 && numeric < 1 ? 4 : 2,
     minimumFractionDigits: 0
   }).format(numeric);
+}
+
+function formatPlainNumber(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "1";
+  if (Number.isInteger(numeric)) return String(numeric);
+  return numeric.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatShortDateTime(value) {
+  return new Intl.DateTimeFormat("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function currencyFlagMarkup(currency) {
+  if (currency.code === "TWD") {
+    return `<span class="taiwan-flag" aria-label="台灣國旗"><span></span></span>`;
+  }
+  return `<span class="emoji-flag">${currency.flag}</span>`;
 }
 
 function formatEntryAmount(item) {
@@ -1034,6 +1308,11 @@ function normalizeAppIcon(icon) {
   return appIconOptions.some((option) => option.id === icon) ? icon : "default";
 }
 
+function normalizeCurrencyCode(code) {
+  const normalized = String(code || "").trim().toUpperCase();
+  return travelCurrencies.some((currency) => currency.code === normalized) ? normalized : "";
+}
+
 function loadSettings() {
   const defaults = {
     theme: "pink",
@@ -1043,9 +1322,12 @@ function loadSettings() {
     travelRateToTwd: fallbackRatesToTwd.JPY,
     travelRateUpdatedAt: "",
     travelSessionId: "",
-    converterAmount: 1000,
-    converterFrom: "JPY",
-    converterTo: "TWD",
+    converterInput: "1",
+    converterBaseCurrency: "TWD",
+    converterCurrencies: ["TWD", "USD", "JPY", "EUR", "CNY", "HKD"],
+    converterRatesBase: "",
+    converterRates: {},
+    converterRateUpdatedAt: "",
     reminderEnabled: false,
     reminderTime: "21:00",
     lastReminderDate: ""
