@@ -1,6 +1,7 @@
 import { firebaseConfig, firebaseIsConfigured } from "./firebase-config.js";
 
 const STORAGE_KEY = "i-expense-pwa-v1";
+const SETTINGS_KEY = "i-expense-pwa-settings-v1";
 const FIREBASE_SDK_VERSION = "12.7.0";
 const APPLE_REFERENCE_OFFSET_MS = 978307200000;
 
@@ -19,8 +20,51 @@ const categories = [
   { id: "incomeOther", name: "其他收入", type: "income", emoji: "💵", color: "#7f9d32", keywords: [] }
 ];
 
+const travelCurrencies = [
+  { code: "TWD", name: "新台幣", flag: "🇹🇼", symbol: "NT$" },
+  { code: "JPY", name: "日圓", flag: "🇯🇵", symbol: "¥" },
+  { code: "USD", name: "美元", flag: "🇺🇸", symbol: "$" },
+  { code: "EUR", name: "歐元", flag: "🇪🇺", symbol: "€" },
+  { code: "GBP", name: "英鎊", flag: "🇬🇧", symbol: "£" },
+  { code: "CHF", name: "瑞士法郎", flag: "🇨🇭", symbol: "CHF" },
+  { code: "HKD", name: "港幣", flag: "🇭🇰", symbol: "HK$" },
+  { code: "MOP", name: "澳門幣", flag: "🇲🇴", symbol: "MOP$" },
+  { code: "CNY", name: "人民幣", flag: "🇨🇳", symbol: "¥" },
+  { code: "KRW", name: "韓元", flag: "🇰🇷", symbol: "₩" },
+  { code: "SGD", name: "新加坡幣", flag: "🇸🇬", symbol: "S$" },
+  { code: "THB", name: "泰銖", flag: "🇹🇭", symbol: "฿" },
+  { code: "AUD", name: "澳幣", flag: "🇦🇺", symbol: "A$" },
+  { code: "CAD", name: "加幣", flag: "🇨🇦", symbol: "C$" },
+  { code: "MYR", name: "馬幣", flag: "🇲🇾", symbol: "RM" },
+  { code: "IDR", name: "印尼盾", flag: "🇮🇩", symbol: "Rp" },
+  { code: "PHP", name: "菲律賓披索", flag: "🇵🇭", symbol: "₱" },
+  { code: "VND", name: "越南盾", flag: "🇻🇳", symbol: "₫" }
+];
+
+const fallbackRatesToTwd = {
+  TWD: 1,
+  USD: 32.5,
+  JPY: 0.215,
+  EUR: 35.5,
+  GBP: 41.5,
+  CHF: 37.2,
+  HKD: 4.15,
+  MOP: 4.01,
+  CNY: 4.5,
+  KRW: 0.024,
+  SGD: 24.5,
+  THB: 0.91,
+  AUD: 21.5,
+  CAD: 23.5,
+  MYR: 7.3,
+  IDR: 0.0021,
+  PHP: 0.56,
+  VND: 0.0013
+};
+
 const state = {
   expenses: loadExpenses(),
+  settings: loadSettings(),
   selectedMonth: startOfMonth(new Date()),
   currentTab: "home",
   statsMode: "category",
@@ -39,6 +83,9 @@ const cloud = {
   ready: false,
   syncing: false
 };
+
+let speechRecognition = null;
+let reminderTimer = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -64,9 +111,29 @@ const els = {
   dialogTitle: $("#dialogTitle"),
   entryId: $("#entryId"),
   amountInput: $("#amountInput"),
+  amountLabel: $("#amountLabel"),
+  travelEstimate: $("#travelEstimate"),
   categoryInput: $("#categoryInput"),
   noteInput: $("#noteInput"),
   dateInput: $("#dateInput"),
+  themeSelect: $("#themeSelect"),
+  travelEnabled: $("#travelEnabled"),
+  travelCurrency: $("#travelCurrency"),
+  travelRateStatus: $("#travelRateStatus"),
+  refreshTravelRate: $("#refreshTravelRate"),
+  converterAmount: $("#converterAmount"),
+  converterFrom: $("#converterFrom"),
+  converterTo: $("#converterTo"),
+  converterStatus: $("#converterStatus"),
+  converterResult: $("#converterResult"),
+  voiceButton: $("#voiceButton"),
+  voiceText: $("#voiceText"),
+  voiceStatus: $("#voiceStatus"),
+  parseVoiceButton: $("#parseVoiceButton"),
+  reminderEnabled: $("#reminderEnabled"),
+  reminderTime: $("#reminderTime"),
+  reminderStatus: $("#reminderStatus"),
+  requestNotification: $("#requestNotification"),
   deleteEntry: $("#deleteEntry"),
   installButton: $("#installButton"),
   authStatus: $("#authStatus"),
@@ -79,6 +146,10 @@ const els = {
 init();
 
 function init() {
+  applyTheme();
+  hydrateCurrencyOptions();
+  hydrateSettingsControls();
+
   els.todayLabel.textContent = new Intl.DateTimeFormat("zh-TW", {
     month: "long",
     day: "numeric",
@@ -89,7 +160,9 @@ function init() {
   hydrateCategoryOptions("expense");
   render();
   updateSyncUI();
+  updateToolsUI();
   initFirebaseSync();
+  startReminderChecker();
   registerServiceWorker();
 }
 
@@ -120,10 +193,12 @@ function bindEvents() {
     radio.addEventListener("change", () => {
       hydrateCategoryOptions(entryType());
       inferCategoryFromNote();
+      updateEntryTravelUI();
     });
   });
 
   els.noteInput.addEventListener("input", inferCategoryFromNote);
+  els.amountInput.addEventListener("input", updateEntryTravelUI);
   els.entryForm.addEventListener("submit", saveEntry);
   els.deleteEntry.addEventListener("click", deleteEntry);
   els.statsMode.addEventListener("change", () => {
@@ -139,6 +214,41 @@ function bindEvents() {
   els.signInButton?.addEventListener("click", signInWithGoogle);
   els.signOutButton?.addEventListener("click", signOutFromCloud);
   els.syncNowButton?.addEventListener("click", syncAllToCloud);
+  els.themeSelect?.addEventListener("change", () => {
+    state.settings.theme = els.themeSelect.value;
+    persistSettings();
+    applyTheme();
+  });
+  els.travelEnabled?.addEventListener("change", () => {
+    state.settings.travelEnabled = els.travelEnabled.checked;
+    if (state.settings.travelEnabled && !state.settings.travelSessionId) state.settings.travelSessionId = makeId();
+    persistSettings();
+    updateToolsUI();
+  });
+  els.travelCurrency?.addEventListener("change", () => {
+    state.settings.travelCurrency = els.travelCurrency.value;
+    persistSettings();
+    fetchTravelRate();
+    updateToolsUI();
+  });
+  els.refreshTravelRate?.addEventListener("click", fetchTravelRate);
+  [els.converterAmount, els.converterFrom, els.converterTo].forEach((element) => {
+    element?.addEventListener("input", updateConverter);
+    element?.addEventListener("change", updateConverter);
+  });
+  els.voiceButton?.addEventListener("click", toggleVoiceInput);
+  els.parseVoiceButton?.addEventListener("click", parseVoiceDraft);
+  els.reminderEnabled?.addEventListener("change", () => {
+    state.settings.reminderEnabled = els.reminderEnabled.checked;
+    persistSettings();
+    updateReminderUI();
+  });
+  els.reminderTime?.addEventListener("change", () => {
+    state.settings.reminderTime = els.reminderTime.value || "21:00";
+    persistSettings();
+    updateReminderUI();
+  });
+  els.requestNotification?.addEventListener("click", requestNotificationPermission);
 
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
@@ -158,7 +268,43 @@ function bindEvents() {
 function render() {
   renderHome();
   renderStats();
+  updateToolsUI();
   renderTabs();
+}
+
+function applyTheme() {
+  const theme = state.settings.theme || "green";
+  document.documentElement.dataset.theme = theme;
+  document.querySelector("meta[name='theme-color']")?.setAttribute("content", theme === "dark" ? "#111827" : theme === "blue" ? "#3478b8" : theme === "pink" ? "#c85a99" : "#2f8f83");
+  if (els.themeSelect) els.themeSelect.value = theme;
+}
+
+function hydrateCurrencyOptions() {
+  const options = travelCurrencies.map((currency) => `<option value="${currency.code}">${currency.flag} ${currency.name} (${currency.code})</option>`).join("");
+  [els.travelCurrency, els.converterFrom, els.converterTo].forEach((select) => {
+    if (select) select.innerHTML = options;
+  });
+}
+
+function hydrateSettingsControls() {
+  if (els.themeSelect) els.themeSelect.value = state.settings.theme;
+  if (els.travelEnabled) els.travelEnabled.checked = state.settings.travelEnabled;
+  if (els.travelCurrency) els.travelCurrency.value = state.settings.travelCurrency;
+  if (els.converterAmount) els.converterAmount.value = String(state.settings.converterAmount);
+  if (els.converterFrom) els.converterFrom.value = state.settings.converterFrom;
+  if (els.converterTo) els.converterTo.value = state.settings.converterTo;
+  if (els.reminderEnabled) els.reminderEnabled.checked = state.settings.reminderEnabled;
+  if (els.reminderTime) els.reminderTime.value = state.settings.reminderTime;
+  setupVoiceUI();
+}
+
+function updateToolsUI() {
+  if (els.travelEnabled) els.travelEnabled.checked = state.settings.travelEnabled;
+  if (els.travelCurrency) els.travelCurrency.value = state.settings.travelCurrency;
+  updateTravelStatus();
+  updateConverter();
+  updateReminderUI();
+  updateEntryTravelUI();
 }
 
 function renderTabs() {
@@ -230,7 +376,7 @@ function renderTransactions(items) {
             <strong>${escapeHtml(item.note || category.name)}</strong>
             <time>${formatDateTime(item.date)} · ${category.name}</time>
           </span>
-          <span class="row-amount ${item.isIncome ? "income" : "expense"}">${item.isIncome ? "+" : ""}${formatCurrency(item.amount)}</span>
+          <span class="row-amount ${item.isIncome ? "income" : "expense"}">${formatEntryAmount(item)}</span>
         </button>
       `;
     }).join("");
@@ -321,18 +467,19 @@ function renderDailyStats(expenseItems) {
   `).join("");
 }
 
-function openEntryDialog(id = "") {
+function openEntryDialog(id = "", draft = null) {
   const item = state.expenses.find((expense) => expense.id === id);
   const isEditing = Boolean(item);
   els.dialogTitle.textContent = isEditing ? "編輯記錄" : "快速記帳";
   els.entryId.value = item?.id || "";
-  els.amountInput.value = item ? String(Math.round(item.amount)) : "";
-  els.noteInput.value = item?.note || "";
-  els.dateInput.value = toLocalInputValue(item ? new Date(item.date) : new Date());
-  setEntryType(item?.isIncome ? "income" : "expense");
+  els.amountInput.value = draft ? String(draft.amount) : item ? String(Math.round(item.originalAmount || item.amount)) : "";
+  els.noteInput.value = draft?.note || item?.note || "";
+  els.dateInput.value = toLocalInputValue(draft?.date ? new Date(draft.date) : item ? new Date(item.date) : new Date());
+  setEntryType(draft?.isIncome ? "income" : item?.isIncome ? "income" : "expense");
   hydrateCategoryOptions(entryType());
-  els.categoryInput.value = item?.category || defaultCategoryId(entryType());
+  els.categoryInput.value = draft?.category || item?.category || defaultCategoryId(entryType());
   els.deleteEntry.hidden = !isEditing;
+  updateEntryTravelUI(item);
   els.dialog.showModal();
   setTimeout(() => els.amountInput.focus(), 50);
 }
@@ -351,15 +498,22 @@ function saveEntry(event) {
   }
 
   const id = els.entryId.value || makeId();
+  const existing = state.expenses.find((item) => item.id === id);
+  const travel = travelPayloadForEntry(amount, existing);
   const next = {
     id,
-    amount,
+    amount: travel?.amountTwd ?? amount,
     category: els.categoryInput.value,
     note: els.noteInput.value.trim(),
     date: new Date(els.dateInput.value).toISOString(),
     isIncome: entryType() === "income",
     updatedAt: Date.now()
   };
+  if (travel) {
+    next.currency = travel.currency;
+    next.originalAmount = amount;
+    next.travelSessionId = travel.travelSessionId;
+  }
 
   const index = state.expenses.findIndex((item) => item.id === id);
   if (index >= 0) {
@@ -413,6 +567,225 @@ function setEntryType(type) {
 
 function defaultCategoryId(type) {
   return type === "income" ? "salary" : "food";
+}
+
+function setupVoiceUI() {
+  const supported = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  if (!els.voiceButton) return;
+  els.voiceButton.disabled = !supported;
+  if (!supported) {
+    els.voiceStatus.textContent = "此瀏覽器不支援即時語音，可直接貼文字解析";
+  }
+}
+
+function toggleVoiceInput() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    window.alert("此瀏覽器不支援即時語音辨識，請改用文字解析。");
+    return;
+  }
+
+  if (speechRecognition) {
+    speechRecognition.stop();
+    speechRecognition = null;
+    els.voiceButton.textContent = "開始語音";
+    els.voiceStatus.textContent = "已停止聽寫";
+    return;
+  }
+
+  speechRecognition = new Recognition();
+  speechRecognition.lang = "zh-TW";
+  speechRecognition.interimResults = true;
+  speechRecognition.continuous = false;
+  els.voiceButton.textContent = "停止語音";
+  els.voiceStatus.textContent = "正在聽寫...";
+
+  speechRecognition.onresult = (event) => {
+    const text = Array.from(event.results).map((result) => result[0]?.transcript || "").join("");
+    els.voiceText.value = text.trim();
+    if (event.results[event.results.length - 1]?.isFinal) {
+      els.voiceStatus.textContent = "聽寫完成，可解析成記帳";
+    }
+  };
+  speechRecognition.onerror = () => {
+    els.voiceStatus.textContent = "語音辨識失敗，請改用文字解析";
+  };
+  speechRecognition.onend = () => {
+    speechRecognition = null;
+    els.voiceButton.textContent = "開始語音";
+  };
+  speechRecognition.start();
+}
+
+function parseVoiceDraft() {
+  const text = els.voiceText.value.trim();
+  const draft = parseVoiceText(text);
+  if (!draft) {
+    window.alert("請輸入像「午餐 120 元」或「薪資 30000」這樣的內容。");
+    return;
+  }
+  state.currentTab = "home";
+  renderTabs();
+  openEntryDialog("", draft);
+}
+
+function parseVoiceText(text) {
+  if (!text) return null;
+  const amountMatch = text.match(/(?:NT\$|NTD|TWD|\$|＄)?\s*(\d+(?:[,.]\d+)?)\s*(?:元|塊|块|日圓|円|美金|美元|dollars?|yen)?/i);
+  if (!amountMatch) return null;
+  const amount = Number(amountMatch[1].replace(/,/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const lowered = text.toLowerCase();
+  const matchedCategory = categories.find((category) =>
+    category.keywords.some((keyword) => lowered.includes(keyword.toLowerCase())) || lowered.includes(category.name.toLowerCase())
+  );
+  const incomeHint = /(收入|薪水|薪資|入帳|獎金|兼職|打工|投資|利息|股利|salary|bonus|income)/i.test(text);
+  const isIncome = matchedCategory ? matchedCategory.type === "income" : incomeHint;
+  const note = text
+    .replace(amountMatch[0], "")
+    .replace(/^(我|幫我|記一下|記帳|新增|花了|支出|收入)\s*/g, "")
+    .trim() || (matchedCategory?.name || (isIncome ? "收入" : "支出"));
+
+  return {
+    amount,
+    category: matchedCategory?.type === (isIncome ? "income" : "expense") ? matchedCategory.id : defaultCategoryId(isIncome ? "income" : "expense"),
+    note,
+    date: new Date().toISOString(),
+    isIncome
+  };
+}
+
+function updateTravelStatus() {
+  if (!els.travelRateStatus) return;
+  const currency = findCurrency(state.settings.travelCurrency);
+  if (!state.settings.travelEnabled) {
+    els.travelRateStatus.textContent = "以台幣記帳";
+    return;
+  }
+  els.travelRateStatus.textContent = `${currency.flag} ${currency.code} 記帳，1 ${currency.code} ≈ NT$${formatRateValue(rateToTwd(currency.code))}`;
+}
+
+async function fetchTravelRate() {
+  const code = state.settings.travelCurrency;
+  if (code === "TWD") {
+    state.settings.travelRateToTwd = 1;
+    persistSettings();
+    updateToolsUI();
+    return;
+  }
+  if (els.travelRateStatus) els.travelRateStatus.textContent = "更新匯率中...";
+  try {
+    const response = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(code)}`);
+    if (!response.ok) throw new Error("rate fetch failed");
+    const data = await response.json();
+    const rate = Number(data.rates?.TWD);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error("missing TWD rate");
+    state.settings.travelRateToTwd = rate;
+    state.settings.travelRateUpdatedAt = new Date().toISOString();
+  } catch {
+    state.settings.travelRateToTwd = fallbackRatesToTwd[code] || 1;
+    state.settings.travelRateUpdatedAt = new Date().toISOString();
+  }
+  persistSettings();
+  updateToolsUI();
+}
+
+function updateConverter() {
+  if (!els.converterResult) return;
+  const amount = Number((els.converterAmount?.value || "0").replace(/,/g, ""));
+  const from = els.converterFrom?.value || "JPY";
+  const to = els.converterTo?.value || "TWD";
+  state.settings.converterAmount = Number.isFinite(amount) ? amount : 0;
+  state.settings.converterFrom = from;
+  state.settings.converterTo = to;
+  persistSettings();
+  const converted = convertCurrency(state.settings.converterAmount, from, to);
+  els.converterResult.textContent = `${formatForeign(converted, to)} ${to}`;
+  if (els.converterStatus) els.converterStatus.textContent = `1 ${from} ≈ ${formatRateValue(convertCurrency(1, from, to))} ${to}`;
+}
+
+function updateReminderUI() {
+  if (!els.reminderStatus) return;
+  if (els.reminderEnabled) els.reminderEnabled.checked = state.settings.reminderEnabled;
+  if (els.reminderTime) els.reminderTime.value = state.settings.reminderTime;
+  const permission = "Notification" in window ? Notification.permission : "unsupported";
+  els.reminderStatus.textContent = state.settings.reminderEnabled
+    ? `${state.settings.reminderTime} 提醒，通知權限：${permission}`
+    : "提醒已關閉";
+}
+
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) {
+    window.alert("此瀏覽器不支援通知。");
+    return;
+  }
+  await Notification.requestPermission();
+  updateReminderUI();
+}
+
+function startReminderChecker() {
+  if (reminderTimer) clearInterval(reminderTimer);
+  checkReminder();
+  reminderTimer = setInterval(checkReminder, 60_000);
+}
+
+function checkReminder() {
+  if (!state.settings.reminderEnabled) return;
+  const now = new Date();
+  const today = dateStamp();
+  const current = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  if (current < state.settings.reminderTime || state.settings.lastReminderDate === today) return;
+  state.settings.lastReminderDate = today;
+  persistSettings();
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("i 記帳提醒", { body: "今天的收支記一下，之後的你會感謝現在的你。" });
+  }
+}
+
+function updateEntryTravelUI(existing = null) {
+  if (!els.amountLabel || !els.travelEstimate) return;
+  const isExpense = entryType() === "expense";
+  const currency = existing?.currency || (state.settings.travelEnabled && isExpense ? state.settings.travelCurrency : "TWD");
+  const isTravel = isExpense && currency && currency !== "TWD";
+  els.amountLabel.textContent = isTravel ? `金額 (${currency})` : "金額";
+  const amount = Number((els.amountInput.value || "0").replace(/,/g, ""));
+  if (isTravel && Number.isFinite(amount) && amount > 0) {
+    els.travelEstimate.hidden = false;
+    els.travelEstimate.textContent = `約 ${formatCurrency(amount * rateToTwd(currency))}`;
+  } else {
+    els.travelEstimate.hidden = true;
+  }
+}
+
+function travelPayloadForEntry(inputAmount, existing = null) {
+  if (entryType() !== "expense") return null;
+  const currency = existing?.currency && existing.currency !== "TWD"
+    ? existing.currency
+    : state.settings.travelEnabled
+      ? state.settings.travelCurrency
+      : "TWD";
+  if (!currency || currency === "TWD") return null;
+  return {
+    currency,
+    amountTwd: inputAmount * rateToTwd(currency),
+    travelSessionId: existing?.travelSessionId || state.settings.travelSessionId || makeId()
+  };
+}
+
+function findCurrency(code) {
+  return travelCurrencies.find((currency) => currency.code === code) || travelCurrencies[0];
+}
+
+function rateToTwd(code) {
+  if (code === state.settings.travelCurrency && Number(state.settings.travelRateToTwd) > 0) {
+    return Number(state.settings.travelRateToTwd);
+  }
+  return fallbackRatesToTwd[code] || 1;
+}
+
+function convertCurrency(amount, from, to) {
+  return (amount * rateToTwd(from)) / rateToTwd(to);
 }
 
 function currentMonthItems() {
@@ -506,6 +879,30 @@ function formatCurrency(value) {
   }).format(value || 0);
 }
 
+function formatForeign(value, code) {
+  const noDecimal = ["JPY", "KRW", "VND", "IDR", "TWD"];
+  return new Intl.NumberFormat("zh-TW", {
+    maximumFractionDigits: noDecimal.includes(code) ? 0 : 2,
+    minimumFractionDigits: 0
+  }).format(value || 0);
+}
+
+function formatRateValue(value) {
+  const numeric = Number(value || 0);
+  return new Intl.NumberFormat("zh-TW", {
+    maximumFractionDigits: numeric > 0 && numeric < 1 ? 4 : 2,
+    minimumFractionDigits: 0
+  }).format(numeric);
+}
+
+function formatEntryAmount(item) {
+  const prefix = item.isIncome ? "+" : "";
+  if (!item.isIncome && item.currency && item.currency !== "TWD" && Number(item.originalAmount) > 0) {
+    return `${prefix}${formatCurrency(item.amount)}<small>${escapeHtml(item.currency)} ${formatForeign(item.originalAmount, item.currency)}</small>`;
+  }
+  return `${prefix}${formatCurrency(item.amount)}`;
+}
+
 function toLocalInputValue(date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 16);
@@ -527,6 +924,32 @@ function escapeHtml(value) {
     '"': "&quot;",
     "'": "&#039;"
   })[char]);
+}
+
+function loadSettings() {
+  const defaults = {
+    theme: "green",
+    travelEnabled: false,
+    travelCurrency: "JPY",
+    travelRateToTwd: fallbackRatesToTwd.JPY,
+    travelRateUpdatedAt: "",
+    travelSessionId: "",
+    converterAmount: 1000,
+    converterFrom: "JPY",
+    converterTo: "TWD",
+    reminderEnabled: false,
+    reminderTime: "21:00",
+    lastReminderDate: ""
+  };
+  try {
+    return { ...defaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+  } catch {
+    return defaults;
+  }
+}
+
+function persistSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
 }
 
 function loadExpenses() {

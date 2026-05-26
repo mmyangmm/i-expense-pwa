@@ -1,4 +1,4 @@
-const CACHE_NAME = "i-expense-pwa-v5";
+const CACHE_NAME = "i-expense-pwa-v6";
 const CORE_ASSETS = [
   "./",
   "./index.html",

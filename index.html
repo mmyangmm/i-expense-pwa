@@ -89,6 +89,91 @@
           </section>
         </section>
 
+        <section class="view" id="toolsView" aria-labelledby="toolsTitle">
+          <div class="section-heading settings-title">
+            <h2 id="toolsTitle">工具</h2>
+          </div>
+          <section class="tool-stack">
+            <div class="tool-panel">
+              <div class="tool-head">
+                <div>
+                  <h3>出國模式</h3>
+                  <p id="travelRateStatus">以台幣記帳</p>
+                </div>
+                <label class="switch">
+                  <input id="travelEnabled" type="checkbox">
+                  <span></span>
+                </label>
+              </div>
+              <div class="tool-grid">
+                <label class="mini-field">
+                  <span>旅遊幣別</span>
+                  <select id="travelCurrency"></select>
+                </label>
+                <button id="refreshTravelRate" class="secondary-action" type="button">更新匯率</button>
+              </div>
+            </div>
+
+            <div class="tool-panel">
+              <div class="tool-head">
+                <div>
+                  <h3>匯率換算</h3>
+                  <p id="converterStatus">可離線使用近似匯率</p>
+                </div>
+              </div>
+              <div class="converter-grid">
+                <label class="mini-field">
+                  <span>金額</span>
+                  <input id="converterAmount" inputmode="decimal" value="1000">
+                </label>
+                <label class="mini-field">
+                  <span>從</span>
+                  <select id="converterFrom"></select>
+                </label>
+                <label class="mini-field">
+                  <span>到</span>
+                  <select id="converterTo"></select>
+                </label>
+              </div>
+              <div class="result-box" id="converterResult">NT$0</div>
+            </div>
+
+            <div class="tool-panel">
+              <div class="tool-head">
+                <div>
+                  <h3>語音快速記帳</h3>
+                  <p id="voiceStatus">可說或貼上「午餐 120」這類文字</p>
+                </div>
+              </div>
+              <textarea id="voiceText" class="tool-textarea" rows="2" placeholder="例如：午餐 120 元、薪資 30000"></textarea>
+              <div class="tool-grid">
+                <button id="voiceButton" class="secondary-action" type="button">開始語音</button>
+                <button id="parseVoiceButton" class="secondary-action" type="button">解析成記帳</button>
+              </div>
+            </div>
+
+            <div class="tool-panel">
+              <div class="tool-head">
+                <div>
+                  <h3>每日提醒</h3>
+                  <p id="reminderStatus">提醒會在 PWA 開啟時檢查</p>
+                </div>
+                <label class="switch">
+                  <input id="reminderEnabled" type="checkbox">
+                  <span></span>
+                </label>
+              </div>
+              <div class="tool-grid">
+                <label class="mini-field">
+                  <span>提醒時間</span>
+                  <input id="reminderTime" type="time">
+                </label>
+                <button id="requestNotification" class="secondary-action" type="button">通知權限</button>
+              </div>
+            </div>
+          </section>
+        </section>
+
         <section class="view" id="settingsView" aria-labelledby="settingsTitle">
           <div class="section-heading settings-title">
             <h2 id="settingsTitle">設定</h2>
@@ -106,6 +191,15 @@
               <button id="syncNowButton" class="secondary-action" type="button" disabled>立即同步</button>
               <button id="signOutButton" class="secondary-action danger-action" type="button" hidden>登出</button>
             </div>
+            <label class="settings-row select-row">
+              <span>主題色彩</span>
+              <select id="themeSelect" aria-label="主題色彩">
+                <option value="green">綠色</option>
+                <option value="pink">粉色</option>
+                <option value="blue">藍色</option>
+                <option value="dark">深色</option>
+              </select>
+            </label>
             <button id="exportJson" class="settings-row" type="button">
               <span>匯出備份</span>
               <strong>JSON</strong>
@@ -136,6 +230,7 @@
       <nav class="tabbar" aria-label="主要分頁">
         <button class="tab active" data-tab="home" type="button">⌂<span>首頁</span></button>
         <button class="tab" data-tab="stats" type="button">◔<span>統計</span></button>
+        <button class="tab" data-tab="tools" type="button">◇<span>工具</span></button>
         <button class="tab" data-tab="settings" type="button">⚙<span>設定</span></button>
       </nav>
     </div>
@@ -162,8 +257,9 @@
         </div>
 
         <label class="field amount-field">
-          <span>金額</span>
+          <span id="amountLabel">金額</span>
           <input id="amountInput" inputmode="decimal" autocomplete="off" placeholder="0" required>
+          <small id="travelEstimate" class="field-hint" hidden></small>
         </label>
 
         <label class="field">
@@ -192,6 +288,6 @@
       </div>
     </template>
 
-    <script src="./app.js?v=5779def" type="module"></script>
+    <script src="./app.js?v=voice1" type="module"></script>
   </body>
 </html>
