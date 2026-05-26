@@ -62,6 +62,33 @@ const fallbackRatesToTwd = {
   VND: 0.0013
 };
 
+const backgroundStyles = [
+  { id: "green", label: "清新", icon: "葉", color: "#2f8f83", bg: "linear-gradient(135deg, #eef8f5, #ffffff)" },
+  { id: "pink", label: "粉色", icon: "花", color: "#ff6b9d", bg: "linear-gradient(135deg, #fff0f6, #ffffff)" },
+  { id: "blue", label: "藍色", icon: "水", color: "#3b82f6", bg: "linear-gradient(135deg, #eaf4ff, #ffffff)" },
+  { id: "light", label: "淺色", icon: "日", color: "#007aff", bg: "linear-gradient(135deg, #f2f2f7, #ffffff)" },
+  { id: "dark", label: "深色", icon: "月", color: "#0a84ff", bg: "linear-gradient(135deg, #20293a, #111827)" }
+];
+
+const appIconOptions = [
+  {
+    id: "default",
+    label: "預設",
+    preview: "./assets/icon-512.png",
+    icon192: "./assets/icon-192.png",
+    appleTouch: "./assets/apple-touch-icon.png",
+    manifest: "./manifest.webmanifest"
+  },
+  {
+    id: "cat",
+    label: "貓咪",
+    preview: "./assets/AppIconAlt_preview.png",
+    icon192: "./assets/icon-alt-192.png",
+    appleTouch: "./assets/apple-touch-icon-alt.png",
+    manifest: "./manifest-alt.webmanifest"
+  }
+];
+
 const state = {
   expenses: loadExpenses(),
   settings: loadSettings(),
@@ -91,6 +118,10 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 const els = {
+  manifestLink: $("#manifestLink"),
+  faviconLink: $("#faviconLink"),
+  appleTouchIcon: $("#appleTouchIcon"),
+  brandIcon: $("#brandIcon"),
   todayLabel: $("#todayLabel"),
   homeTitle: $("#homeTitle"),
   goCurrentMonth: $("#goCurrentMonth"),
@@ -117,6 +148,9 @@ const els = {
   noteInput: $("#noteInput"),
   dateInput: $("#dateInput"),
   themeSelect: $("#themeSelect"),
+  backgroundOptions: $("#backgroundOptions"),
+  iconOptions: $("#iconOptions"),
+  iconStatus: $("#iconStatus"),
   travelEnabled: $("#travelEnabled"),
   travelCurrency: $("#travelCurrency"),
   travelRateStatus: $("#travelRateStatus"),
@@ -147,6 +181,7 @@ init();
 
 function init() {
   applyTheme();
+  applyAppIcon();
   hydrateCurrencyOptions();
   hydrateSettingsControls();
 
@@ -219,6 +254,22 @@ function bindEvents() {
     persistSettings();
     applyTheme();
   });
+  els.backgroundOptions?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-background-style]");
+    if (!button) return;
+    state.settings.theme = normalizeTheme(button.dataset.backgroundStyle);
+    persistSettings();
+    applyTheme();
+    renderAppearanceOptions();
+  });
+  els.iconOptions?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-app-icon]");
+    if (!button) return;
+    state.settings.appIcon = normalizeAppIcon(button.dataset.appIcon);
+    persistSettings();
+    applyAppIcon();
+    renderAppearanceOptions();
+  });
   els.travelEnabled?.addEventListener("change", () => {
     state.settings.travelEnabled = els.travelEnabled.checked;
     if (state.settings.travelEnabled && !state.settings.travelSessionId) state.settings.travelSessionId = makeId();
@@ -273,10 +324,22 @@ function render() {
 }
 
 function applyTheme() {
-  const theme = state.settings.theme || "green";
+  const theme = normalizeTheme(state.settings.theme);
   document.documentElement.dataset.theme = theme;
-  document.querySelector("meta[name='theme-color']")?.setAttribute("content", theme === "dark" ? "#111827" : theme === "blue" ? "#3478b8" : theme === "pink" ? "#c85a99" : "#2f8f83");
+  const selected = backgroundStyles.find((style) => style.id === theme) || backgroundStyles[0];
+  document.querySelector("meta[name='theme-color']")?.setAttribute("content", theme === "dark" ? "#111827" : selected.color);
   if (els.themeSelect) els.themeSelect.value = theme;
+}
+
+function applyAppIcon() {
+  const icon = appIconOptions.find((option) => option.id === normalizeAppIcon(state.settings.appIcon)) || appIconOptions[0];
+  if (els.brandIcon) {
+    els.brandIcon.src = icon.icon192;
+    els.brandIcon.alt = "";
+  }
+  if (els.faviconLink) els.faviconLink.href = icon.icon192;
+  if (els.appleTouchIcon) els.appleTouchIcon.href = icon.appleTouch;
+  if (els.manifestLink) els.manifestLink.href = icon.manifest;
 }
 
 function hydrateCurrencyOptions() {
@@ -288,6 +351,7 @@ function hydrateCurrencyOptions() {
 
 function hydrateSettingsControls() {
   if (els.themeSelect) els.themeSelect.value = state.settings.theme;
+  renderAppearanceOptions();
   if (els.travelEnabled) els.travelEnabled.checked = state.settings.travelEnabled;
   if (els.travelCurrency) els.travelCurrency.value = state.settings.travelCurrency;
   if (els.converterAmount) els.converterAmount.value = String(state.settings.converterAmount);
@@ -296,6 +360,42 @@ function hydrateSettingsControls() {
   if (els.reminderEnabled) els.reminderEnabled.checked = state.settings.reminderEnabled;
   if (els.reminderTime) els.reminderTime.value = state.settings.reminderTime;
   setupVoiceUI();
+}
+
+function renderAppearanceOptions() {
+  const theme = normalizeTheme(state.settings.theme);
+  if (els.backgroundOptions) {
+    els.backgroundOptions.innerHTML = backgroundStyles.map((style) => {
+      const selected = style.id === theme;
+      return `
+        <button class="choice-button theme-choice${selected ? " selected" : ""}" data-background-style="${style.id}" type="button" role="radio" aria-checked="${selected}">
+          <span class="theme-swatch" style="--swatch-bg:${style.bg};--swatch-color:${style.color}">
+            <span>${style.icon}</span>
+          </span>
+          <span>${style.label}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  const appIcon = normalizeAppIcon(state.settings.appIcon);
+  const selectedIcon = appIconOptions.find((option) => option.id === appIcon) || appIconOptions[0];
+  if (els.iconOptions) {
+    els.iconOptions.innerHTML = appIconOptions.map((option) => {
+      const selected = option.id === appIcon;
+      return `
+        <button class="choice-button icon-choice${selected ? " selected" : ""}" data-app-icon="${option.id}" type="button" role="radio" aria-checked="${selected}">
+          <img src="${option.preview}" alt="" width="52" height="52">
+          <span>${option.label}</span>
+        </button>
+      `;
+    }).join("");
+  }
+  if (els.iconStatus) {
+    els.iconStatus.textContent = selectedIcon.id === "default"
+      ? "目前使用預設圖示"
+      : "目前使用貓咪圖示；iPhone 主畫面圖示需重新加入才會更新";
+  }
 }
 
 function updateToolsUI() {
@@ -926,9 +1026,18 @@ function escapeHtml(value) {
   })[char]);
 }
 
+function normalizeTheme(theme) {
+  return backgroundStyles.some((style) => style.id === theme) ? theme : "pink";
+}
+
+function normalizeAppIcon(icon) {
+  return appIconOptions.some((option) => option.id === icon) ? icon : "default";
+}
+
 function loadSettings() {
   const defaults = {
-    theme: "green",
+    theme: "pink",
+    appIcon: "default",
     travelEnabled: false,
     travelCurrency: "JPY",
     travelRateToTwd: fallbackRatesToTwd.JPY,

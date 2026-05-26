@@ -1,4 +1,4 @@
-const CACHE_NAME = "i-expense-pwa-v6";
+const CACHE_NAME = "i-expense-pwa-v7";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -6,9 +6,14 @@ const CORE_ASSETS = [
   "./app.js",
   "./firebase-config.js",
   "./manifest.webmanifest",
+  "./manifest-alt.webmanifest",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
-  "./assets/apple-touch-icon.png"
+  "./assets/apple-touch-icon.png",
+  "./assets/AppIconAlt_preview.png",
+  "./assets/icon-alt-192.png",
+  "./assets/icon-alt-512.png",
+  "./assets/apple-touch-icon-alt.png"
 ];
 
 self.addEventListener("install", (event) => {
@@ -35,7 +40,9 @@ self.addEventListener("fetch", (event) => {
     event.request.mode === "navigate" ||
     requestUrl.pathname.endsWith("/index.html") ||
     requestUrl.pathname.endsWith("/app.js") ||
-    requestUrl.pathname.endsWith("/sw.js")
+    requestUrl.pathname.endsWith("/sw.js") ||
+    requestUrl.pathname.endsWith("/manifest.webmanifest") ||
+    requestUrl.pathname.endsWith("/manifest-alt.webmanifest")
   );
 
   if (freshAsset) {

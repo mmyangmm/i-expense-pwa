@@ -8,15 +8,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="i 記帳">
     <title>i 記帳</title>
-    <link rel="manifest" href="./manifest.webmanifest">
-    <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+    <link id="manifestLink" rel="manifest" href="./manifest.webmanifest">
+    <link id="faviconLink" rel="icon" href="./assets/icon-192.png" type="image/png">
+    <link id="appleTouchIcon" rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div class="brand">
-          <img src="./assets/icon-192.png" alt="" width="42" height="42">
+          <img id="brandIcon" src="./assets/icon-192.png" alt="" width="42" height="42">
           <div>
             <h1>i 記帳</h1>
             <p id="todayLabel"></p>
@@ -191,15 +192,20 @@
               <button id="syncNowButton" class="secondary-action" type="button" disabled>立即同步</button>
               <button id="signOutButton" class="secondary-action danger-action" type="button" hidden>登出</button>
             </div>
-            <label class="settings-row select-row">
-              <span>主題色彩</span>
-              <select id="themeSelect" aria-label="主題色彩">
-                <option value="green">綠色</option>
-                <option value="pink">粉色</option>
-                <option value="blue">藍色</option>
-                <option value="dark">深色</option>
-              </select>
-            </label>
+            <div class="settings-row appearance-row">
+              <span>
+                <span class="settings-title-line">背景風格</span>
+                <small>套用原 App 的粉色、藍色、淺色、深色風格</small>
+              </span>
+              <div id="backgroundOptions" class="option-grid background-options" role="radiogroup" aria-label="背景風格"></div>
+            </div>
+            <div class="settings-row appearance-row">
+              <span>
+                <span class="settings-title-line">App 圖示</span>
+                <small id="iconStatus">目前使用預設圖示</small>
+              </span>
+              <div id="iconOptions" class="option-grid icon-options" role="radiogroup" aria-label="App 圖示"></div>
+            </div>
             <button id="exportJson" class="settings-row" type="button">
               <span>匯出備份</span>
               <strong>JSON</strong>
@@ -288,6 +294,6 @@
       </div>
     </template>
 
-    <script src="./app.js?v=voice1" type="module"></script>
+    <script src="./app.js?v=appearance1" type="module"></script>
   </body>
 </html>
