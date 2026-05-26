@@ -134,6 +134,7 @@ function bindEvents() {
   $("#exportJson").addEventListener("click", exportJson);
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#importJson").addEventListener("change", importJson);
+  $("#pasteJson").addEventListener("click", importJsonFromClipboard);
   $("#clearData").addEventListener("click", clearData);
   els.signInButton?.addEventListener("click", signInWithGoogle);
   els.signOutButton?.addEventListener("click", signOutFromCloud);
@@ -596,27 +597,7 @@ function importJson(event) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const parsed = JSON.parse(String(reader.result));
-      const imported = Array.isArray(parsed) ? parsed : parsed.expenses;
-      if (!Array.isArray(imported)) throw new Error("Invalid backup");
-      const normalized = imported
-        .filter((item) => item && Number(item.amount) > 0 && item.date)
-        .map((item) => ({
-          id: item.id || makeId(),
-          amount: Number(item.amount),
-          category: normalizeCategory(item.category),
-          note: String(item.note || ""),
-          date: parseExpenseDate(item.date).toISOString(),
-          isIncome: Boolean(item.isIncome),
-          currency: item.currency ? String(item.currency) : undefined,
-          originalAmount: Number.isFinite(Number(item.originalAmount)) ? Number(item.originalAmount) : undefined,
-          travelSessionId: item.travelSessionId ? String(item.travelSessionId) : undefined,
-          updatedAt: Number(item.updatedAt || 0) || Date.now()
-        }));
-      state.expenses = mergeExpenses(state.expenses, normalized);
-      persist();
-      syncAllToCloud();
-      render();
+      importJsonText(String(reader.result));
     } catch {
       window.alert("匯入失敗，檔案格式不正確。");
     } finally {
@@ -624,6 +605,39 @@ function importJson(event) {
     }
   };
   reader.readAsText(file);
+}
+
+async function importJsonFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    importJsonText(text);
+  } catch {
+    window.alert("無法讀取剪貼簿，請改用 JSON 檔案匯入。");
+  }
+}
+
+function importJsonText(text) {
+  const parsed = JSON.parse(text);
+  const imported = Array.isArray(parsed) ? parsed : parsed.expenses;
+  if (!Array.isArray(imported)) throw new Error("Invalid backup");
+  const normalized = imported
+    .filter((item) => item && Number(item.amount) > 0 && item.date)
+    .map((item) => ({
+      id: item.id || makeId(),
+      amount: Number(item.amount),
+      category: normalizeCategory(item.category),
+      note: String(item.note || ""),
+      date: parseExpenseDate(item.date).toISOString(),
+      isIncome: Boolean(item.isIncome),
+      currency: item.currency ? String(item.currency) : undefined,
+      originalAmount: Number.isFinite(Number(item.originalAmount)) ? Number(item.originalAmount) : undefined,
+      travelSessionId: item.travelSessionId ? String(item.travelSessionId) : undefined,
+      updatedAt: Number(item.updatedAt || 0) || Date.now()
+    }));
+  state.expenses = mergeExpenses(state.expenses, normalized);
+  persist();
+  syncAllToCloud();
+  render();
 }
 
 function mergeExpenses(current, imported) {
