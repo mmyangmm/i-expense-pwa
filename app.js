@@ -2,6 +2,7 @@ import { firebaseConfig, firebaseIsConfigured } from "./firebase-config.js";
 
 const STORAGE_KEY = "i-expense-pwa-v1";
 const FIREBASE_SDK_VERSION = "12.7.0";
+const APPLE_REFERENCE_OFFSET_MS = 978307200000;
 
 const categories = [
   { id: "food", name: "餐飲", type: "expense", emoji: "🍜", color: "#e65f63", keywords: ["午餐", "早餐", "晚餐", "飯", "食", "吃", "咖啡", "飲料", "餐廳", "便當", "麵", "超商", "711", "全家", "甜點", "奶茶", "火鍋"] },
@@ -549,15 +550,19 @@ function replaceExpenses(expenses) {
 }
 
 function normalizeStoredExpense(item) {
-  return {
+  const normalized = {
     id: item.id || makeId(),
     amount: Number(item.amount || 0),
     category: normalizeCategory(item.category),
     note: String(item.note || ""),
-    date: new Date(item.date || Date.now()).toISOString(),
+    date: parseExpenseDate(item.date || Date.now()).toISOString(),
     isIncome: Boolean(item.isIncome),
     updatedAt: Number(item.updatedAt || 0) || Date.now()
   };
+  if (item.currency) normalized.currency = String(item.currency);
+  if (Number.isFinite(Number(item.originalAmount))) normalized.originalAmount = Number(item.originalAmount);
+  if (item.travelSessionId) normalized.travelSessionId = String(item.travelSessionId);
+  return normalized;
 }
 
 function exportJson() {
@@ -601,8 +606,11 @@ function importJson(event) {
           amount: Number(item.amount),
           category: normalizeCategory(item.category),
           note: String(item.note || ""),
-          date: new Date(item.date).toISOString(),
+          date: parseExpenseDate(item.date).toISOString(),
           isIncome: Boolean(item.isIncome),
+          currency: item.currency ? String(item.currency) : undefined,
+          originalAmount: Number.isFinite(Number(item.originalAmount)) ? Number(item.originalAmount) : undefined,
+          travelSessionId: item.travelSessionId ? String(item.travelSessionId) : undefined,
           updatedAt: Number(item.updatedAt || 0) || Date.now()
         }));
       state.expenses = mergeExpenses(state.expenses, normalized);
@@ -628,6 +636,20 @@ function mergeExpenses(current, imported) {
     }
   });
   return Array.from(byId.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function parseExpenseDate(value) {
+  if (typeof value === "number") {
+    if (value > 1_000_000_000_000) return safeDate(value);
+    if (value > 1_000_000_000) return safeDate(value * 1000);
+    return safeDate((value * 1000) + APPLE_REFERENCE_OFFSET_MS);
+  }
+  return safeDate(value);
+}
+
+function safeDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
 function clearData() {
