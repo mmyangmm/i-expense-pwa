@@ -3,41 +3,43 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#2f8f83">
+    <meta name="theme-color" content="#ff6b9d">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="i 記帳">
     <title>i 記帳</title>
-    <link id="manifestLink" rel="manifest" href="./manifest.webmanifest">
-    <link id="faviconLink" rel="icon" href="./assets/icon-192.png" type="image/png">
-    <link id="appleTouchIcon" rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
+    <link rel="stylesheet" href="./styles.css?v=13">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div class="brand">
-          <img id="brandIcon" src="./assets/icon-192.png" alt="" width="42" height="42">
+          <span class="brand-icon" id="brandIcon" aria-hidden="true">i</span>
           <div>
             <h1>i 記帳</h1>
             <p id="todayLabel"></p>
           </div>
         </div>
-        <button class="icon-button" id="installButton" type="button" hidden aria-label="安裝">⇩</button>
       </header>
 
-      <main>
+      <main id="mainContent">
         <section class="view active" id="homeView" aria-labelledby="homeTitle">
-          <div class="month-bar">
-            <button class="icon-button" data-month="-1" type="button" aria-label="上個月">‹</button>
-            <div>
-              <h2 id="homeTitle"></h2>
-              <button class="text-button" id="goCurrentMonth" type="button" hidden>回到本月</button>
+          <section class="summary-panel month-card">
+            <div class="month-bar">
+              <button class="icon-button" data-month="-1" type="button" aria-label="上個月">
+                <span aria-hidden="true">‹</span>
+              </button>
+              <div class="month-title">
+                <h2 id="homeTitle"></h2>
+                <button class="month-pill" id="goCurrentMonth" type="button" hidden>回到本月</button>
+              </div>
+              <button class="icon-button" data-month="1" type="button" aria-label="下個月">
+                <span aria-hidden="true">›</span>
+              </button>
             </div>
-            <button class="icon-button" data-month="1" type="button" aria-label="下個月">›</button>
-          </div>
 
-          <section class="summary-panel">
             <div class="summary-grid">
               <div>
                 <span class="metric-label expense-dot">支出</span>
@@ -47,16 +49,17 @@
                 <span class="metric-label income-dot">收入</span>
                 <strong class="income" id="monthIncome">NT$0</strong>
               </div>
-              <div>
-                <span class="metric-label balance-dot">結餘</span>
-                <strong id="monthBalance">NT$0</strong>
-              </div>
             </div>
-            <div class="compare-row">
-              <span>6 個月平均</span>
-              <span id="averageLabel">NT$0</span>
+
+            <div class="compare-copy">
+              <span>本月消費</span>
+              <span>6個月平均</span>
             </div>
             <div class="meter" aria-hidden="true"><span id="averageMeter"></span></div>
+            <div class="compare-row">
+              <span id="currentExpenseLabel">NT$0</span>
+              <span id="averageLabel">NT$0</span>
+            </div>
           </section>
 
           <section class="category-strip" id="categoryStrip" aria-label="分類摘要"></section>
@@ -90,212 +93,287 @@
           </section>
         </section>
 
-        <section class="view" id="toolsView" aria-labelledby="toolsTitle">
-          <div class="section-heading settings-title">
-            <h2 id="toolsTitle">工具</h2>
-          </div>
-          <section class="tool-stack">
-            <div class="tool-panel">
-              <div class="tool-head">
-                <div>
-                  <h3>匯率換算</h3>
-                  <p id="converterStatus">可離線使用近似匯率</p>
-                </div>
-                <div class="tool-actions">
-                  <button id="refreshConverterRates" class="icon-chip" type="button" aria-label="更新匯率">↻</button>
-                  <button id="manageCurrencies" class="icon-chip" type="button" aria-label="管理幣別">☰</button>
-                </div>
-              </div>
-              <div id="converterList" class="converter-list"></div>
-              <div id="converterPad" class="converter-pad" aria-label="換匯數字鍵盤"></div>
-            </div>
-          </section>
-        </section>
-
         <section class="view" id="settingsView" aria-labelledby="settingsTitle">
           <div class="section-heading settings-title">
             <h2 id="settingsTitle">設定</h2>
           </div>
-          <section class="settings-list">
-            <div class="settings-row auth-row">
-              <span>
-                <span class="settings-title-line">雲端同步</span>
-                <small id="syncStatus">尚未設定 Firebase</small>
-              </span>
-              <strong id="authStatus">本機</strong>
-            </div>
-            <div class="settings-actions">
-              <button id="signInButton" class="secondary-action" type="button">Google 登入</button>
-              <button id="syncNowButton" class="secondary-action" type="button" disabled>立即同步</button>
-              <button id="signOutButton" class="secondary-action danger-action" type="button" hidden>登出</button>
-            </div>
-            <div class="settings-row appearance-row">
-              <span>
-                <span class="settings-title-line">背景風格</span>
-                <small>套用原 App 的粉色、藍色、淺色、深色風格</small>
-              </span>
-              <div id="backgroundOptions" class="option-grid background-options" role="radiogroup" aria-label="背景風格"></div>
-            </div>
-            <div class="settings-row appearance-row">
-              <span>
-                <span class="settings-title-line">App 圖示</span>
-                <small id="iconStatus">目前使用預設圖示</small>
-              </span>
-              <div id="iconOptions" class="option-grid icon-options" role="radiogroup" aria-label="App 圖示"></div>
-            </div>
-            <div class="settings-row reminder-row">
-              <span>
-                <span class="settings-title-line">每日記帳提醒</span>
-                <small id="reminderStatus">提醒已關閉</small>
-              </span>
-              <label class="switch">
-                <input id="reminderEnabled" type="checkbox">
-                <span></span>
-              </label>
-            </div>
-            <div class="settings-actions reminder-actions">
-              <label class="mini-field">
-                <span>提醒時間</span>
-                <input id="reminderTime" type="time">
-              </label>
-              <button id="requestNotification" class="secondary-action" type="button">通知權限</button>
-            </div>
-            <div class="settings-row travel-row">
-              <span>
-                <span class="settings-title-line">✈️ 出國模式</span>
-                <small id="travelRateStatus">以台幣記帳</small>
-              </span>
-              <label class="switch">
-                <input id="travelEnabled" type="checkbox">
-                <span></span>
-              </label>
-            </div>
-            <div class="settings-actions travel-actions">
-              <label class="mini-field">
-                <span>旅遊幣別</span>
+          <section class="settings-stack">
+            <section class="settings-card" aria-labelledby="cloudSyncTitle">
+              <div class="settings-card-head">
+                <div>
+                  <h3 id="cloudSyncTitle">Google 雲端同步</h3>
+                  <span id="cloudSyncStatus"></span>
+                </div>
+              </div>
+              <div class="cloud-user" id="cloudUserCard" hidden>
+                <span class="cloud-avatar" id="cloudUserAvatar" aria-hidden="true"></span>
+                <div>
+                  <strong id="cloudUserName"></strong>
+                  <span id="cloudUserEmail"></span>
+                </div>
+              </div>
+              <div class="button-grid cloud-actions">
+                <button class="settings-action primary-action" id="googleSignIn" type="button">使用 Google 登入</button>
+                <button class="settings-action" id="syncNow" type="button">立即同步</button>
+                <button class="settings-action" id="googleSignOut" type="button">登出</button>
+              </div>
+              <p class="settings-note">登入後會透過 Firebase Authentication 與 Firestore 合併並自動同步本機資料。</p>
+            </section>
+
+            <section class="settings-card" aria-labelledby="reminderTitle">
+              <div class="settings-card-head">
+                <div>
+                  <h3 id="reminderTitle">通知提醒</h3>
+                  <span id="notificationStatus"></span>
+                </div>
+                <label class="switch">
+                  <input id="reminderEnabled" type="checkbox" aria-label="開啟通知提醒">
+                  <span aria-hidden="true"></span>
+                </label>
+              </div>
+              <div class="settings-control-row reminder-time-row">
+                <label for="reminderTime">提醒時間</label>
+                <input id="reminderTime" type="time" value="21:00">
+              </div>
+              <div class="button-grid">
+                <button class="settings-action" id="requestNotification" type="button">允許通知</button>
+                <button class="settings-action" id="testNotification" type="button">測試通知</button>
+              </div>
+            </section>
+
+            <section class="settings-card" aria-labelledby="themeTitle">
+              <div class="settings-card-head">
+                <div>
+                  <h3 id="themeTitle">主題色彩</h3>
+                  <span id="themeSummary"></span>
+                </div>
+              </div>
+              <div class="option-grid theme-options" id="themeOptions" aria-label="主題色彩"></div>
+            </section>
+
+            <section class="settings-card" aria-labelledby="iconTitle">
+              <div class="settings-card-head">
+                <div>
+                  <h3 id="iconTitle">App 圖示</h3>
+                  <span id="iconSummary"></span>
+                </div>
+              </div>
+              <div class="option-grid icon-options" id="iconOptions" aria-label="App 圖示"></div>
+            </section>
+
+            <section class="settings-card" aria-labelledby="travelTitle">
+              <div class="settings-card-head">
+                <div>
+                  <h3 id="travelTitle">出國模式</h3>
+                  <span id="travelStatus"></span>
+                </div>
+                <label class="switch">
+                  <input id="travelModeEnabled" type="checkbox" aria-label="開啟出國模式">
+                  <span aria-hidden="true"></span>
+                </label>
+              </div>
+              <div class="settings-control-row">
+                <label for="travelCurrency">記帳幣別</label>
                 <select id="travelCurrency"></select>
-              </label>
-              <button id="refreshTravelRate" class="secondary-action" type="button">重新整理匯率</button>
-            </div>
-            <button id="exportJson" class="settings-row" type="button">
-              <span>匯出備份</span>
-              <strong>JSON</strong>
-            </button>
-            <button id="exportCsv" class="settings-row" type="button">
-              <span>匯出表格</span>
-              <strong>CSV</strong>
-            </button>
-            <label class="settings-row file-row">
-              <span>匯入備份</span>
-              <strong>JSON</strong>
-              <input id="importJson" type="file" accept="application/json,.json">
-            </label>
-            <button id="pasteJson" class="settings-row" type="button">
-              <span>貼上匯入</span>
-              <strong>JSON</strong>
-            </button>
-            <button id="clearData" class="settings-row danger-row" type="button">
-              <span>清除資料</span>
-              <strong>全部</strong>
-            </button>
+              </div>
+              <div class="settings-control-row">
+                <span id="travelRateLabel">匯率待更新</span>
+                <button class="mini-button" id="refreshTravelRate" type="button">更新</button>
+              </div>
+            </section>
+
+            <section class="settings-card" aria-labelledby="converterEntryTitle">
+              <div class="settings-card-head">
+                <div>
+                  <h3 id="converterEntryTitle">換匯</h3>
+                  <span id="converterEntrySummary"></span>
+                </div>
+                <button class="mini-button" id="openConverter" type="button" aria-label="開啟換匯">開啟 →</button>
+              </div>
+              <p class="settings-note">多幣別即時換算，點開單獨頁面操作。</p>
+            </section>
+
+            <section class="settings-card" aria-labelledby="dataTitle">
+              <div class="settings-card-head">
+                <div>
+                  <h3 id="dataTitle">資料管理</h3>
+                  <span id="dataCount"></span>
+                </div>
+              </div>
+              <div class="settings-list">
+                <button id="exportJson" class="settings-row" type="button">
+                  <span>匯出備份</span>
+                  <strong>JSON</strong>
+                </button>
+                <button id="copyJson" class="settings-row" type="button">
+                  <span>複製備份</span>
+                  <strong>剪貼簿</strong>
+                </button>
+                <button id="exportCsv" class="settings-row" type="button">
+                  <span>匯出表格</span>
+                  <strong>CSV</strong>
+                </button>
+                <label class="settings-row file-row">
+                  <span>匯入備份</span>
+                  <strong>JSON</strong>
+                  <input id="importJson" type="file" accept="application/json,.json">
+                </label>
+                <button id="clearData" class="settings-row danger-row" type="button">
+                  <span>清除資料</span>
+                  <strong>全部</strong>
+                </button>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section class="view" id="converterView" aria-labelledby="converterTitle">
+          <div class="section-heading converter-heading">
+            <button class="mini-button converter-back" id="backFromConverter" type="button" aria-label="返回設定">← 設定</button>
+            <h2 id="converterTitle">換匯</h2>
+            <button class="mini-button" id="refreshConverterRates" type="button">更新</button>
+          </div>
+          <section class="settings-stack">
+            <section class="settings-card" aria-label="換匯計算">
+              <div class="settings-card-head">
+                <div>
+                  <span id="converterStatus"></span>
+                </div>
+              </div>
+              <div class="converter-list" id="converterList"></div>
+              <div class="currency-manager" aria-labelledby="currencyManagerTitle">
+                <div class="settings-control-row converter-add-row">
+                  <label id="currencyManagerTitle" for="converterAddCurrency">新增幣別</label>
+                  <select id="converterAddCurrency"></select>
+                  <button class="mini-button" id="addConverterCurrency" type="button">新增</button>
+                </div>
+                <p class="settings-note">在任一幣別輸入金額即可作為基準；用 ↑ ↓ 調整順序。</p>
+              </div>
+            </section>
           </section>
         </section>
       </main>
 
-      <button class="fab" id="addButton" type="button">記帳</button>
+      <button class="fab" id="addButton" type="button" aria-label="新增記錄">記帳</button>
 
       <nav class="tabbar" aria-label="主要分頁">
-        <button class="tab active" data-tab="home" type="button">⌂<span>首頁</span></button>
-        <button class="tab" data-tab="stats" type="button">◔<span>統計</span></button>
-        <button class="tab" data-tab="tools" type="button">◇<span>工具</span></button>
-        <button class="tab" data-tab="settings" type="button">⚙<span>設定</span></button>
+        <button class="tab active" data-tab="home" type="button" aria-current="page">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 11.3 12 4l9 7.3v8.2a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H4.5A1.5 1.5 0 0 1 3 19.5z"/></svg>
+          <span>首頁</span>
+        </button>
+        <button class="tab" data-tab="stats" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M11 3.06A9 9 0 1 0 20.94 13H11z"/><path d="M13 3.06V11h7.94A9 9 0 0 0 13 3.06z"/></svg>
+          <span>統計</span>
+        </button>
+        <button class="tab" data-tab="settings" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 8.2A3.8 3.8 0 1 0 12 15.8 3.8 3.8 0 0 0 12 8.2zm8.5 3.8-1.8-1 .2-2-2.2-2.2-2 .2-1-1.8h-3.4l-1 1.8-2-.2-2.2 2.2.2 2-1.8 1v3.4l1.8 1-.2 2 2.2 2.2 2-.2 1 1.8h3.4l1-1.8 2 .2 2.2-2.2-.2-2 1.8-1z"/></svg>
+          <span>設定</span>
+        </button>
       </nav>
     </div>
 
-    <dialog id="entryDialog">
+    <dialog id="entryDialog" class="quick-add-dialog">
       <form id="entryForm" method="dialog">
         <div class="dialog-head">
-          <button class="icon-button" id="cancelEntry" value="cancel" type="button" aria-label="取消">×</button>
+          <button class="toolbar-button" id="cancelEntry" value="cancel" type="button">取消</button>
           <h2 id="dialogTitle">快速記帳</h2>
-          <button class="save-button" id="saveEntry" value="default" type="submit">儲存</button>
+          <button class="toolbar-button danger-toolbar" id="deleteEntry" type="button" hidden>刪除</button>
         </div>
 
         <input type="hidden" id="entryId">
+        <input type="hidden" id="categoryInput">
+        <input type="hidden" id="noteInput">
+        <input type="hidden" id="dateInput">
+        <input id="amountInput" class="sr-only" inputmode="decimal" autocomplete="off" aria-describedby="amountError" tabindex="-1" aria-hidden="true">
 
-        <div class="segmented" role="radiogroup" aria-label="收支類型">
-          <label>
-            <input type="radio" name="entryType" value="expense" checked>
-            <span>支出</span>
-          </label>
-          <label>
-            <input type="radio" name="entryType" value="income">
-            <span>收入</span>
-          </label>
+        <div class="quick-add-scroll">
+          <div class="segmented" role="radiogroup" aria-label="收支類型">
+            <label>
+              <input type="radio" name="entryType" value="expense" checked>
+              <span>支出</span>
+            </label>
+            <label>
+              <input type="radio" name="entryType" value="income">
+              <span>收入</span>
+            </label>
+          </div>
+
+          <section class="amount-card" aria-live="polite">
+            <div class="amount-type">
+              <span id="amountSign" aria-hidden="true">−</span>
+              <span id="currencySymbol">NT$</span>
+            </div>
+            <strong id="amountDisplay">0</strong>
+            <p class="amount-hint" id="twdHint" hidden></p>
+            <p class="field-error" id="amountError" hidden>請輸入金額</p>
+          </section>
+
+          <section class="category-panel" aria-labelledby="categoryTitle">
+            <div class="panel-title" id="categoryTitle">分類</div>
+            <div class="category-grid" id="categoryGrid" role="radiogroup" aria-label="分類"></div>
+          </section>
+
         </div>
 
-        <label class="field amount-field">
-          <span id="amountLabel">金額</span>
-          <input id="amountInput" inputmode="decimal" autocomplete="off" placeholder="0" required>
-          <small id="travelEstimate" class="field-hint" hidden></small>
-        </label>
+        <div class="status-banner voice-banner" id="voiceBanner" hidden aria-live="polite"></div>
+        <div class="status-banner scan-banner" id="scanBanner" hidden aria-live="polite"></div>
 
-        <label class="field">
-          <span>分類</span>
-          <select id="categoryInput"></select>
-        </label>
-
-        <label class="field">
-          <span>備註</span>
-          <input id="noteInput" autocomplete="off" placeholder="午餐、捷運、薪資...">
-        </label>
-
-        <label class="field">
-          <span>日期</span>
-          <input id="dateInput" type="datetime-local" required>
-        </label>
-
-        <section class="quick-voice">
-          <div>
-            <strong>語音快速記帳</strong>
-            <small id="voiceStatus">可說或貼上「午餐 120」這類文字</small>
+        <div class="calc-keyboard" aria-label="數字鍵盤">
+          <div class="calc-row">
+            <button type="button" class="calc-key" data-key="7">7</button>
+            <button type="button" class="calc-key" data-key="8">8</button>
+            <button type="button" class="calc-key" data-key="9">9</button>
           </div>
-          <textarea id="voiceText" class="tool-textarea" rows="2" placeholder="例如：午餐 120 元、薪資 30000"></textarea>
-          <div class="quick-actions">
-            <button id="parseVoiceButton" class="action-pill parse-pill" type="button">解析</button>
-            <button id="voiceButton" class="action-pill mic-pill" type="button">語音</button>
+          <div class="calc-row">
+            <button type="button" class="calc-key" data-key="4">4</button>
+            <button type="button" class="calc-key" data-key="5">5</button>
+            <button type="button" class="calc-key" data-key="6">6</button>
           </div>
-        </section>
-
-        <button class="delete-button" id="deleteEntry" type="button" hidden>刪除此筆</button>
-      </form>
-    </dialog>
-
-    <dialog id="currencyDialog">
-      <form method="dialog" class="currency-manager">
-        <div class="dialog-head">
-          <button class="icon-button" id="closeCurrencyDialog" value="cancel" type="button" aria-label="關閉">×</button>
-          <h2>管理幣別</h2>
-          <button class="save-button" value="default" type="submit">完成</button>
+          <div class="calc-row">
+            <button type="button" class="calc-key" data-key="1">1</button>
+            <button type="button" class="calc-key" data-key="2">2</button>
+            <button type="button" class="calc-key" data-key="3">3</button>
+          </div>
+          <div class="calc-row">
+            <button type="button" class="calc-key" data-key=".">.</button>
+            <button type="button" class="calc-key" data-key="0">0</button>
+            <button type="button" class="calc-key delete-key" data-key="delete" aria-label="刪除一位">⌫</button>
+          </div>
+          <div class="action-row">
+            <button type="button" class="action-key scan-key icon-action" id="scanReceipt" aria-label="掃描收據">
+              <span class="action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M9 6l1.3-2h3.4L15 6h3.5A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8A2.5 2.5 0 0 1 5.5 6H9z"/><circle cx="12" cy="12.5" r="3.2"/></svg>
+              </span>
+            </button>
+            <button type="submit" class="action-key save-key" id="saveEntry" aria-label="儲存記帳">
+              <span class="action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></svg>
+              </span>
+              <strong>儲存</strong>
+            </button>
+            <button type="button" class="action-key mic-key icon-action" id="voiceButton" aria-label="語音記帳">
+              <span class="action-icon voice-icon" aria-hidden="true" id="voiceIcon">
+                <svg class="voice-symbol mic-symbol" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/></svg>
+                <svg class="voice-symbol stop-symbol" viewBox="0 0 24 24"><path d="M8 8h8v8H8z"/></svg>
+              </span>
+              <strong id="voiceLabel" class="sr-only">語音記帳</strong>
+            </button>
+          </div>
         </div>
-        <section class="manager-section">
-          <h3>顯示中</h3>
-          <p>至少保留 2 個幣別；點選換匯列表可改基準幣別。</p>
-          <div id="selectedCurrencyList" class="currency-manager-list"></div>
-        </section>
-        <section class="manager-section">
-          <h3>新增幣別</h3>
-          <div id="availableCurrencyList" class="currency-manager-list"></div>
-        </section>
+
+        <input id="receiptInput" type="file" accept="image/*" capture="environment" hidden>
       </form>
     </dialog>
 
     <template id="emptyTemplate">
       <div class="empty-state">
-        <div>💸</div>
+        <div aria-hidden="true">💸</div>
         <strong>本月還沒有記錄</strong>
+        <span>點下方「記帳」開始記帳吧！</span>
       </div>
     </template>
 
-    <script src="./app.js?v=ux2" type="module"></script>
+    <script src="./firebase-config.js?v=13"></script>
+    <script src="./app.js?v=13" type="module"></script>
   </body>
 </html>

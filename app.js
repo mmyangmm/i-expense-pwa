@@ -1,27 +1,55 @@
-import { firebaseConfig, firebaseIsConfigured } from "./firebase-config.js";
-
 const STORAGE_KEY = "i-expense-pwa-v1";
 const SETTINGS_KEY = "i-expense-pwa-settings-v1";
-const FIREBASE_SDK_VERSION = "12.7.0";
-const APPLE_REFERENCE_OFFSET_MS = 978307200000;
+const TRIPS_KEY = "i-expense-pwa-trips-v1";
+const RATE_CACHE_KEY = "i-expense-pwa-rates-v1";
+const DEFAULT_THEME_COLOR = "#ff6b9d";
+const FIREBASE_SDK_VERSION = "12.13.0";
+
+let reminderTimer = null;
+let cloudSyncTimer = null;
+let cloudSyncInFlight = false;
+let firebaseInitializing = true;
+let firebaseConfigured = false;
+let firebaseApp = null;
+let firebaseAuth = null;
+let firebaseDb = null;
+let firebaseModules = null;
+let firebaseUser = null;
+let cloudMergeInProgress = false;
 
 const categories = [
-  { id: "food", name: "餐飲", type: "expense", emoji: "🍜", color: "#e65f63", keywords: ["午餐", "早餐", "晚餐", "飯", "食", "吃", "咖啡", "飲料", "餐廳", "便當", "麵", "超商", "711", "全家", "甜點", "奶茶", "火鍋"] },
-  { id: "transport", name: "交通", type: "expense", emoji: "🚗", color: "#2f9c95", keywords: ["捷運", "公車", "計程車", "uber", "taxi", "油費", "停車", "高鐵", "火車", "交通", "加油", "機票", "台鐵", "悠遊"] },
-  { id: "shopping", name: "購物", type: "expense", emoji: "🛍️", color: "#3478b8", keywords: ["購物", "買", "衣服", "鞋子", "包包", "3c", "電腦", "手機", "momo", "蝦皮", "網購", "amazon", "ikea", "百貨"] },
-  { id: "entertainment", name: "娛樂", type: "expense", emoji: "🎮", color: "#7a65b7", keywords: ["電影", "遊戲", "ktv", "娛樂", "netflix", "旅遊", "玩", "音樂", "書", "展覽", "演唱會", "健身"] },
-  { id: "medical", name: "醫療", type: "expense", emoji: "💊", color: "#c85a99", keywords: ["醫院", "藥局", "看病", "醫療", "診所", "藥", "健檢", "牙科", "眼科", "掛號"] },
-  { id: "home", name: "居家", type: "expense", emoji: "🏠", color: "#d68a2f", keywords: ["水電", "房租", "家具", "裝潢", "修繕", "家居", "清潔", "網路", "瓦斯", "保險", "管理費"] },
-  { id: "other", name: "其他", type: "expense", emoji: "📦", color: "#7b8a86", keywords: [] },
-  { id: "salary", name: "薪資", type: "income", emoji: "💰", color: "#238b45", keywords: ["薪水", "薪資", "月薪", "工資", "底薪", "發薪", "入帳", "salary"] },
-  { id: "bonus", name: "獎金", type: "income", emoji: "🎁", color: "#3aa35c", keywords: ["獎金", "年終", "績效", "紅包", "禮金", "bonus"] },
-  { id: "partTime", name: "兼職", type: "income", emoji: "💼", color: "#3686b8", keywords: ["兼職", "打工", "接案", "freelance", "外快", "副業", "稿費"] },
-  { id: "investment", name: "投資", type: "income", emoji: "📈", color: "#7650a8", keywords: ["股票", "股利", "投資", "基金", "利息", "配息", "dividend", "收益"] },
-  { id: "incomeOther", name: "其他收入", type: "income", emoji: "💵", color: "#7f9d32", keywords: [] }
+  { id: "food", name: "餐飲", type: "expense", emoji: "🍜", color: "#ff6b6b", keywords: ["午餐", "早餐", "晚餐", "飯", "食", "吃", "餐廳", "便當", "麵", "小吃", "夜市", "火鍋", "壽司", "拉麵", "漢堡", "pizza"] },
+  { id: "drinks", name: "飲料", type: "expense", emoji: "🧋", color: "#c27a3a", keywords: ["飲料", "咖啡", "奶茶", "珍奶", "茶", "手搖", "星巴克", "可樂", "果汁", "酒", "啤酒"] },
+  { id: "groceries", name: "超市", type: "expense", emoji: "🛒", color: "#4f9f52", keywords: ["超市", "全聯", "家樂福", "costco", "好市多", "菜", "水果", "生鮮", "雜貨", "採買"] },
+  { id: "transport", name: "交通", type: "expense", emoji: "🚗", color: "#4ecdc4", keywords: ["捷運", "公車", "計程車", "uber", "taxi", "油費", "停車", "高鐵", "火車", "交通", "加油", "機票", "台鐵", "悠遊", "youbike", "摩托"] },
+  { id: "shopping", name: "購物", type: "expense", emoji: "🛍️", color: "#45b7d1", keywords: ["購物", "買", "3c", "電腦", "手機", "momo", "蝦皮", "網購", "amazon", "百貨", "日用品"] },
+  { id: "clothing", name: "服飾", type: "expense", emoji: "👗", color: "#ff8fb3", keywords: ["衣服", "服飾", "鞋子", "包包", "外套", "褲子", "uniqlo", "zara", "穿搭"] },
+  { id: "entertainment", name: "娛樂", type: "expense", emoji: "🎮", color: "#96ceb4", keywords: ["電影", "遊戲", "ktv", "娛樂", "玩", "音樂", "書", "展覽", "演唱會", "劇場", "桌遊"] },
+  { id: "subscription", name: "訂閱", type: "expense", emoji: "📱", color: "#8f7ae5", keywords: ["訂閱", "netflix", "spotify", "youtube", "icloud", "app", "會員", "月費", "方案"] },
+  { id: "travel", name: "旅遊", type: "expense", emoji: "✈️", color: "#2f80ed", keywords: ["旅遊", "旅行", "住宿", "飯店", "hotel", "民宿", "機票", "行李", "門票", "出國"] },
+  { id: "medical", name: "醫療", type: "expense", emoji: "💊", color: "#ff9ff3", keywords: ["醫院", "藥局", "看病", "醫療", "診所", "藥", "健檢", "牙科", "眼科", "掛號", "保健", "維他命"] },
+  { id: "beauty", name: "美容", type: "expense", emoji: "💅", color: "#d66fc4", keywords: ["美容", "美甲", "美髮", "剪髮", "染髮", "保養", "化妝", "保養品", "按摩", "spa"] },
+  { id: "fitness", name: "運動", type: "expense", emoji: "🏋️", color: "#ff9f1c", keywords: ["健身", "gym", "運動", "瑜伽", "球", "游泳", "課程", "教練", "跑步"] },
+  { id: "home", name: "居家", type: "expense", emoji: "🏠", color: "#ffeaa7", keywords: ["房租", "家具", "裝潢", "修繕", "家居", "清潔", "管理費", "房貸"] },
+  { id: "utilities", name: "水電", type: "expense", emoji: "💡", color: "#f4b942", keywords: ["水電", "電費", "水費", "瓦斯", "網路", "電話費", "手機費", "第四台", "帳單"] },
+  { id: "education", name: "學習", type: "expense", emoji: "📚", color: "#7a65b7", keywords: ["學習", "課程", "補習", "書", "教材", "學費", "線上課", "udemy", "語言"] },
+  { id: "family", name: "家庭", type: "expense", emoji: "👨‍👩‍👧", color: "#ff7f50", keywords: ["家庭", "小孩", "孩子", "爸媽", "家人", "孝親", "托嬰", "奶粉", "尿布"] },
+  { id: "pets", name: "寵物", type: "expense", emoji: "🐾", color: "#a66a45", keywords: ["寵物", "貓", "狗", "飼料", "獸醫", "貓砂", "美容"] },
+  { id: "gifts", name: "禮物", type: "expense", emoji: "🎁", color: "#ff6f91", keywords: ["禮物", "生日", "請客", "紅包", "禮金", "送禮", "聚餐"] },
+  { id: "insurance", name: "保險", type: "expense", emoji: "🛡️", color: "#607d8b", keywords: ["保險", "保費", "壽險", "醫療險", "車險"] },
+  { id: "tax", name: "稅費", type: "expense", emoji: "🧾", color: "#8d6e63", keywords: ["稅", "稅金", "所得稅", "牌照稅", "燃料稅", "手續費", "罰單"] },
+  { id: "other", name: "其他", type: "expense", emoji: "📦", color: "#b2bec3", keywords: [] },
+  { id: "salary", name: "薪資", type: "income", emoji: "💰", color: "#34c759", keywords: ["薪水", "薪資", "月薪", "工資", "底薪", "發薪", "入帳", "salary"] },
+  { id: "bonus", name: "獎金", type: "income", emoji: "🏆", color: "#30d158", keywords: ["獎金", "年終", "績效", "紅包", "禮金", "bonus"] },
+  { id: "partTime", name: "兼職", type: "income", emoji: "💼", color: "#5ac8fa", keywords: ["兼職", "打工", "接案", "freelance", "外快", "副業", "稿費"] },
+  { id: "investment", name: "投資", type: "income", emoji: "📈", color: "#af52de", keywords: ["股票", "股利", "投資", "基金", "利息", "配息", "dividend", "收益"] },
+  { id: "refund", name: "退款", type: "income", emoji: "↩️", color: "#00a896", keywords: ["退款", "退費", "退貨", "回饋", "折讓", "補助", "退稅"] },
+  { id: "rental", name: "租金", type: "income", emoji: "🏘️", color: "#4e9f3d", keywords: ["租金", "房租收入", "收租", "租屋"] },
+  { id: "incomeOther", name: "其他收入", type: "income", emoji: "💵", color: "#9acd32", keywords: [] }
 ];
 
 const travelCurrencies = [
-  { code: "TWD", name: "新台幣", flag: "🇹🇼", symbol: "NT$" },
+  { code: "TWD", name: "新台幣", flag: "NT$", symbol: "NT$" },
   { code: "JPY", name: "日圓", flag: "🇯🇵", symbol: "¥" },
   { code: "USD", name: "美元", flag: "🇺🇸", symbol: "$" },
   { code: "EUR", name: "歐元", flag: "🇪🇺", symbol: "€" },
@@ -35,25 +63,13 @@ const travelCurrencies = [
   { code: "THB", name: "泰銖", flag: "🇹🇭", symbol: "฿" },
   { code: "AUD", name: "澳幣", flag: "🇦🇺", symbol: "A$" },
   { code: "CAD", name: "加幣", flag: "🇨🇦", symbol: "C$" },
-  { code: "NZD", name: "紐西蘭幣", flag: "🇳🇿", symbol: "NZ$" },
   { code: "MYR", name: "馬幣", flag: "🇲🇾", symbol: "RM" },
   { code: "IDR", name: "印尼盾", flag: "🇮🇩", symbol: "Rp" },
   { code: "PHP", name: "菲律賓披索", flag: "🇵🇭", symbol: "₱" },
-  { code: "VND", name: "越南盾", flag: "🇻🇳", symbol: "₫" },
-  { code: "INR", name: "印度盧比", flag: "🇮🇳", symbol: "₹" },
-  { code: "AED", name: "阿聯迪拉姆", flag: "🇦🇪", symbol: "د.إ" },
-  { code: "SEK", name: "瑞典克朗", flag: "🇸🇪", symbol: "kr" },
-  { code: "NOK", name: "挪威克朗", flag: "🇳🇴", symbol: "kr" },
-  { code: "DKK", name: "丹麥克朗", flag: "🇩🇰", symbol: "kr" },
-  { code: "PLN", name: "波蘭茲羅提", flag: "🇵🇱", symbol: "zł" },
-  { code: "CZK", name: "捷克克朗", flag: "🇨🇿", symbol: "Kč" },
-  { code: "TRY", name: "土耳其里拉", flag: "🇹🇷", symbol: "₺" },
-  { code: "ZAR", name: "南非蘭特", flag: "🇿🇦", symbol: "R" },
-  { code: "MXN", name: "墨西哥披索", flag: "🇲🇽", symbol: "Mex$" },
-  { code: "BRL", name: "巴西雷亞爾", flag: "🇧🇷", symbol: "R$" }
+  { code: "VND", name: "越南盾", flag: "🇻🇳", symbol: "₫" }
 ];
 
-const fallbackRatesToTwd = {
+const fallbackTwdRates = {
   TWD: 1,
   USD: 32.5,
   JPY: 0.215,
@@ -61,97 +77,66 @@ const fallbackRatesToTwd = {
   GBP: 41.5,
   CHF: 37.2,
   HKD: 4.15,
-  MOP: 4.01,
+  SGD: 24.5,
   CNY: 4.5,
   KRW: 0.024,
-  SGD: 24.5,
   THB: 0.91,
   AUD: 21.5,
   CAD: 23.5,
-  NZD: 19.7,
   MYR: 7.3,
   IDR: 0.0021,
   PHP: 0.56,
   VND: 0.0013,
-  INR: 0.39,
-  AED: 8.85,
-  SEK: 3.05,
-  NOK: 3.08,
-  DKK: 4.75,
-  PLN: 8.3,
-  CZK: 1.45,
-  TRY: 1.0,
-  ZAR: 1.8,
-  MXN: 1.75,
-  BRL: 6.1
+  MOP: 4.01
 };
 
-const backgroundStyles = [
-  { id: "green", label: "清新", icon: "葉", color: "#2f8f83", bg: "linear-gradient(135deg, #eef8f5, #ffffff)" },
-  { id: "pink", label: "粉色", icon: "花", color: "#ff6b9d", bg: "linear-gradient(135deg, #fff0f6, #ffffff)" },
-  { id: "blue", label: "藍色", icon: "水", color: "#3b82f6", bg: "linear-gradient(135deg, #eaf4ff, #ffffff)" },
-  { id: "light", label: "淺色", icon: "日", color: "#007aff", bg: "linear-gradient(135deg, #f2f2f7, #ffffff)" },
-  { id: "dark", label: "深色", icon: "月", color: "#0a84ff", bg: "linear-gradient(135deg, #20293a, #111827)" }
+const themeOptions = [
+  { id: "pink", name: "蜜桃", color: "#ff6b9d", swatch: "linear-gradient(135deg, #ff6b9d, #f06f3f)" },
+  { id: "ocean", name: "海藍", color: "#2f8edb", swatch: "linear-gradient(135deg, #2f8edb, #14a38b)" },
+  { id: "matcha", name: "抹茶", color: "#54a45f", swatch: "linear-gradient(135deg, #54a45f, #d28b2f)" },
+  { id: "graphite", name: "黑曜", color: "#15171c", swatch: "linear-gradient(135deg, #f07aa7, #4d5f84)" }
 ];
 
-const appIconOptions = [
-  {
-    id: "default",
-    label: "預設",
-    preview: "./assets/icon-512.png",
-    icon192: "./assets/icon-192.png",
-    appleTouch: "./assets/apple-touch-icon.png",
-    manifest: "./manifest.webmanifest"
-  },
-  {
-    id: "cat",
-    label: "貓咪",
-    preview: "./assets/AppIconAlt_preview.png",
-    icon192: "./assets/icon-alt-192.png",
-    appleTouch: "./assets/apple-touch-icon-alt.png",
-    manifest: "./manifest-alt.webmanifest"
-  }
+const iconOptions = [
+  { id: "cat", name: "貓咪", image: "./assets/app-icon-cat.png", bg: "linear-gradient(135deg, #2dd4bf, #ff7aa8)" },
+  { id: "classic", name: "經典", symbol: "i", bg: "linear-gradient(135deg, #ff6b9d, #f06f3f)" },
+  { id: "coin", name: "金幣", symbol: "$", bg: "linear-gradient(135deg, #f8b64c, #e56d46)" },
+  { id: "travel", name: "旅行", symbol: "✈", bg: "linear-gradient(135deg, #2f8edb, #14a38b)" }
 ];
+
+const converterDefaultCodes = ["TWD", "USD", "JPY", "EUR", "CNY", "HKD", "KRW", "THB"];
 
 const state = {
   expenses: loadExpenses(),
   settings: loadSettings(),
+  trips: loadTrips(),
+  rateCache: loadRateCache(),
   selectedMonth: startOfMonth(new Date()),
   currentTab: "home",
   statsMode: "category",
-  deferredInstallPrompt: null,
-  syncStatus: firebaseIsConfigured ? "準備連線" : "尚未設定 Firebase",
-  authLabel: "本機",
-  user: null
+  recognition: null,
+  isRecording: false,
+  voiceTranscript: "",
+  voiceMessage: "",
+  shouldParseOnStop: false,
+  scanMessage: "",
+  isScanning: false,
+  activeEntryCurrency: null,
+  converterMessage: "",
+  travelMessage: "",
+  cloudSyncMessage: ""
 };
-
-const cloud = {
-  auth: null,
-  db: null,
-  provider: null,
-  unsubscribe: null,
-  modules: null,
-  ready: false,
-  syncing: false
-};
-
-let speechRecognition = null;
-let reminderTimer = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 const els = {
-  manifestLink: $("#manifestLink"),
-  faviconLink: $("#faviconLink"),
-  appleTouchIcon: $("#appleTouchIcon"),
-  brandIcon: $("#brandIcon"),
   todayLabel: $("#todayLabel"),
   homeTitle: $("#homeTitle"),
   goCurrentMonth: $("#goCurrentMonth"),
   monthExpense: $("#monthExpense"),
   monthIncome: $("#monthIncome"),
-  monthBalance: $("#monthBalance"),
+  currentExpenseLabel: $("#currentExpenseLabel"),
   averageLabel: $("#averageLabel"),
   averageMeter: $("#averageMeter"),
   categoryStrip: $("#categoryStrip"),
@@ -166,68 +151,78 @@ const els = {
   dialogTitle: $("#dialogTitle"),
   entryId: $("#entryId"),
   amountInput: $("#amountInput"),
-  amountLabel: $("#amountLabel"),
-  travelEstimate: $("#travelEstimate"),
+  amountDisplay: $("#amountDisplay"),
+  amountCard: $(".amount-card"),
+  amountSign: $("#amountSign"),
+  currencySymbol: $("#currencySymbol"),
+  twdHint: $("#twdHint"),
+  amountError: $("#amountError"),
   categoryInput: $("#categoryInput"),
+  categoryGrid: $("#categoryGrid"),
   noteInput: $("#noteInput"),
   dateInput: $("#dateInput"),
-  themeSelect: $("#themeSelect"),
-  backgroundOptions: $("#backgroundOptions"),
-  iconOptions: $("#iconOptions"),
-  iconStatus: $("#iconStatus"),
-  travelEnabled: $("#travelEnabled"),
-  travelCurrency: $("#travelCurrency"),
-  travelRateStatus: $("#travelRateStatus"),
-  refreshTravelRate: $("#refreshTravelRate"),
-  converterStatus: $("#converterStatus"),
-  converterList: $("#converterList"),
-  converterPad: $("#converterPad"),
-  refreshConverterRates: $("#refreshConverterRates"),
-  manageCurrencies: $("#manageCurrencies"),
-  currencyDialog: $("#currencyDialog"),
-  closeCurrencyDialog: $("#closeCurrencyDialog"),
-  selectedCurrencyList: $("#selectedCurrencyList"),
-  availableCurrencyList: $("#availableCurrencyList"),
+  deleteEntry: $("#deleteEntry"),
+  saveEntry: $("#saveEntry"),
   voiceButton: $("#voiceButton"),
-  voiceText: $("#voiceText"),
-  voiceStatus: $("#voiceStatus"),
-  parseVoiceButton: $("#parseVoiceButton"),
+  voiceIcon: $("#voiceIcon"),
+  voiceLabel: $("#voiceLabel"),
+  voiceBanner: $("#voiceBanner"),
+  scanReceipt: $("#scanReceipt"),
+  receiptInput: $("#receiptInput"),
+  scanBanner: $("#scanBanner"),
+  brandIcon: $("#brandIcon"),
+  themeSummary: $("#themeSummary"),
+  iconSummary: $("#iconSummary"),
+  themeOptions: $("#themeOptions"),
+  iconOptions: $("#iconOptions"),
+  travelModeEnabled: $("#travelModeEnabled"),
+  travelCurrency: $("#travelCurrency"),
+  travelRateLabel: $("#travelRateLabel"),
+  travelStatus: $("#travelStatus"),
+  refreshTravelRate: $("#refreshTravelRate"),
+  refreshConverterRates: $("#refreshConverterRates"),
+  converterList: $("#converterList"),
+  converterStatus: $("#converterStatus"),
+  converterAddCurrency: $("#converterAddCurrency"),
+  addConverterCurrency: $("#addConverterCurrency"),
   reminderEnabled: $("#reminderEnabled"),
   reminderTime: $("#reminderTime"),
-  reminderStatus: $("#reminderStatus"),
   requestNotification: $("#requestNotification"),
-  deleteEntry: $("#deleteEntry"),
-  installButton: $("#installButton"),
-  authStatus: $("#authStatus"),
-  syncStatus: $("#syncStatus"),
-  signInButton: $("#signInButton"),
-  signOutButton: $("#signOutButton"),
-  syncNowButton: $("#syncNowButton")
+  testNotification: $("#testNotification"),
+  notificationStatus: $("#notificationStatus"),
+  cloudSyncStatus: $("#cloudSyncStatus"),
+  cloudUserCard: $("#cloudUserCard"),
+  cloudUserAvatar: $("#cloudUserAvatar"),
+  cloudUserName: $("#cloudUserName"),
+  cloudUserEmail: $("#cloudUserEmail"),
+  googleSignIn: $("#googleSignIn"),
+  googleSignOut: $("#googleSignOut"),
+  syncNow: $("#syncNow"),
+  dataCount: $("#dataCount"),
+  copyJson: $("#copyJson")
 };
 
 init();
 
 function init() {
-  applyTheme();
-  applyAppIcon();
-  hydrateCurrencyOptions();
-  hydrateSettingsControls();
-
+  els.entryForm.noValidate = true;
   els.todayLabel.textContent = new Intl.DateTimeFormat("zh-TW", {
     month: "long",
     day: "numeric",
     weekday: "long"
   }).format(new Date());
 
+  applySettings();
+  populateCurrencySelects();
   bindEvents();
-  hydrateCategoryOptions("expense");
+  renderCategoryPicker();
+  renderAmountDisplay();
+  renderSettings();
   render();
-  updateSyncUI();
-  updateToolsUI();
-  initFirebaseSync();
-  startReminderChecker();
-  if (!state.settings.converterRateUpdatedAt) fetchConverterRates();
+  refreshRatesForSettings(false);
+  scheduleReminder();
   registerServiceWorker();
+  initFirebaseSync();
 }
 
 function bindEvents() {
@@ -255,14 +250,17 @@ function bindEvents() {
 
   $$("input[name='entryType']").forEach((radio) => {
     radio.addEventListener("change", () => {
-      hydrateCategoryOptions(entryType());
+      const nextType = entryType();
+      if (!categoryMatchesType(els.categoryInput.value, nextType)) {
+        els.categoryInput.value = defaultCategoryId(nextType);
+      }
       inferCategoryFromNote();
-      updateEntryTravelUI();
+      renderCategoryPicker();
+      renderAmountDisplay();
     });
   });
 
   els.noteInput.addEventListener("input", inferCategoryFromNote);
-  els.amountInput.addEventListener("input", updateEntryTravelUI);
   els.entryForm.addEventListener("submit", saveEntry);
   els.deleteEntry.addEventListener("click", deleteEntry);
   els.statsMode.addEventListener("change", () => {
@@ -270,190 +268,880 @@ function bindEvents() {
     renderStats();
   });
 
+  $$(".calc-key").forEach((button) => {
+    button.addEventListener("click", () => handleCalcKey(button.dataset.key));
+  });
+
+  els.voiceButton.addEventListener("click", handleVoiceTap);
+  els.scanReceipt.addEventListener("click", () => els.receiptInput.click());
+  els.receiptInput.addEventListener("change", handleReceiptInput);
+
+  els.refreshConverterRates.addEventListener("click", () => refreshConverterRates(true));
+  els.addConverterCurrency.addEventListener("click", addSelectedConverterCurrency);
+  $("#openConverter").addEventListener("click", () => {
+    state.currentTab = "converter";
+    renderTabs();
+    window.scrollTo({ top: 0, behavior: "auto" });
+  });
+  $("#backFromConverter").addEventListener("click", () => {
+    state.currentTab = "settings";
+    renderTabs();
+    window.scrollTo({ top: 0, behavior: "auto" });
+  });
+  els.refreshTravelRate.addEventListener("click", () => refreshTravelRate(true));
+  els.travelModeEnabled.addEventListener("change", () => toggleTravelMode(els.travelModeEnabled.checked));
+  els.travelCurrency.addEventListener("change", () => {
+    state.settings.travelCurrency = els.travelCurrency.value;
+    saveSettings();
+    renderSettings();
+    refreshTravelRate(false);
+    renderAmountDisplay();
+  });
+  els.reminderEnabled.addEventListener("change", () => updateReminderEnabled(els.reminderEnabled.checked));
+  els.reminderTime.addEventListener("change", () => {
+    state.settings.reminderTime = els.reminderTime.value || "21:00";
+    saveSettings();
+    renderNotificationSettings();
+    scheduleReminder();
+  });
+  els.googleSignIn.addEventListener("click", signInWithGoogle);
+  els.googleSignOut.addEventListener("click", signOutGoogle);
+  els.syncNow.addEventListener("click", () => performCloudSync("manual", true));
+  els.requestNotification.addEventListener("click", requestNotificationPermission);
+  els.testNotification.addEventListener("click", () => showReminderNotification(true));
   $("#exportJson").addEventListener("click", exportJson);
+  els.copyJson.addEventListener("click", copyJson);
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#importJson").addEventListener("change", importJson);
-  $("#pasteJson").addEventListener("click", importJsonFromClipboard);
   $("#clearData").addEventListener("click", clearData);
-  els.signInButton?.addEventListener("click", signInWithGoogle);
-  els.signOutButton?.addEventListener("click", signOutFromCloud);
-  els.syncNowButton?.addEventListener("click", syncAllToCloud);
-  els.themeSelect?.addEventListener("change", () => {
-    state.settings.theme = els.themeSelect.value;
-    persistSettings();
-    applyTheme();
-  });
-  els.backgroundOptions?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-background-style]");
-    if (!button) return;
-    state.settings.theme = normalizeTheme(button.dataset.backgroundStyle);
-    persistSettings();
-    applyTheme();
-    renderAppearanceOptions();
-  });
-  els.iconOptions?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-app-icon]");
-    if (!button) return;
-    state.settings.appIcon = normalizeAppIcon(button.dataset.appIcon);
-    persistSettings();
-    applyAppIcon();
-    renderAppearanceOptions();
-  });
-  els.travelEnabled?.addEventListener("change", () => {
-    state.settings.travelEnabled = els.travelEnabled.checked;
-    if (state.settings.travelEnabled && !state.settings.travelSessionId) state.settings.travelSessionId = makeId();
-    persistSettings();
-    updateToolsUI();
-  });
-  els.travelCurrency?.addEventListener("change", () => {
-    state.settings.travelCurrency = els.travelCurrency.value;
-    persistSettings();
-    fetchTravelRate();
-    updateToolsUI();
-  });
-  els.refreshTravelRate?.addEventListener("click", fetchTravelRate);
-  els.refreshConverterRates?.addEventListener("click", () => fetchConverterRates());
-  els.manageCurrencies?.addEventListener("click", openCurrencyManager);
-  els.closeCurrencyDialog?.addEventListener("click", () => els.currencyDialog?.close());
-  els.converterList?.addEventListener("click", (event) => {
-    const row = event.target.closest("[data-converter-code]");
-    if (!row) return;
-    switchConverterBase(row.dataset.converterCode);
-  });
-  els.converterPad?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-converter-key]");
-    if (!button) return;
-    handleConverterKey(button.dataset.converterKey);
-  });
-  els.selectedCurrencyList?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-currency-action]");
-    if (!button) return;
-    updateConverterCurrencyOrder(button.dataset.currencyAction, button.dataset.currencyCode);
-  });
-  els.availableCurrencyList?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-currency-add]");
-    if (!button) return;
-    addConverterCurrency(button.dataset.currencyAdd);
-  });
-  els.voiceButton?.addEventListener("click", toggleVoiceInput);
-  els.parseVoiceButton?.addEventListener("click", parseVoiceDraft);
-  els.reminderEnabled?.addEventListener("change", () => {
-    state.settings.reminderEnabled = els.reminderEnabled.checked;
-    persistSettings();
-    updateReminderUI();
-  });
-  els.reminderTime?.addEventListener("change", () => {
-    state.settings.reminderTime = els.reminderTime.value || "21:00";
-    persistSettings();
-    updateReminderUI();
-  });
-  els.requestNotification?.addEventListener("click", requestNotificationPermission);
 
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    state.deferredInstallPrompt = event;
-    els.installButton.hidden = false;
-  });
-
-  els.installButton.addEventListener("click", async () => {
-    if (!state.deferredInstallPrompt) return;
-    state.deferredInstallPrompt.prompt();
-    await state.deferredInstallPrompt.userChoice;
-    state.deferredInstallPrompt = null;
-    els.installButton.hidden = true;
-  });
 }
 
 function render() {
   renderHome();
   renderStats();
-  updateToolsUI();
+  renderSettings();
   renderTabs();
-}
-
-function applyTheme() {
-  const theme = normalizeTheme(state.settings.theme);
-  document.documentElement.dataset.theme = theme;
-  const selected = backgroundStyles.find((style) => style.id === theme) || backgroundStyles[0];
-  document.querySelector("meta[name='theme-color']")?.setAttribute("content", theme === "dark" ? "#111827" : selected.color);
-  if (els.themeSelect) els.themeSelect.value = theme;
-}
-
-function applyAppIcon() {
-  const icon = appIconOptions.find((option) => option.id === normalizeAppIcon(state.settings.appIcon)) || appIconOptions[0];
-  if (els.brandIcon) {
-    els.brandIcon.src = icon.icon192;
-    els.brandIcon.alt = "";
-  }
-  if (els.faviconLink) els.faviconLink.href = icon.icon192;
-  if (els.appleTouchIcon) els.appleTouchIcon.href = icon.appleTouch;
-  if (els.manifestLink) els.manifestLink.href = icon.manifest;
-}
-
-function hydrateCurrencyOptions() {
-  const options = travelCurrencies.map((currency) => `<option value="${currency.code}">${currency.flag} ${currency.name} (${currency.code})</option>`).join("");
-  if (els.travelCurrency) els.travelCurrency.innerHTML = options;
-}
-
-function hydrateSettingsControls() {
-  if (els.themeSelect) els.themeSelect.value = state.settings.theme;
-  renderAppearanceOptions();
-  if (els.travelEnabled) els.travelEnabled.checked = state.settings.travelEnabled;
-  if (els.travelCurrency) els.travelCurrency.value = state.settings.travelCurrency;
-  if (els.reminderEnabled) els.reminderEnabled.checked = state.settings.reminderEnabled;
-  if (els.reminderTime) els.reminderTime.value = state.settings.reminderTime;
-  setupVoiceUI();
-}
-
-function renderAppearanceOptions() {
-  const theme = normalizeTheme(state.settings.theme);
-  if (els.backgroundOptions) {
-    els.backgroundOptions.innerHTML = backgroundStyles.map((style) => {
-      const selected = style.id === theme;
-      return `
-        <button class="choice-button theme-choice${selected ? " selected" : ""}" data-background-style="${style.id}" type="button" role="radio" aria-checked="${selected}">
-          <span class="theme-swatch" style="--swatch-bg:${style.bg};--swatch-color:${style.color}">
-            <span>${style.icon}</span>
-          </span>
-          <span>${style.label}</span>
-        </button>
-      `;
-    }).join("");
-  }
-
-  const appIcon = normalizeAppIcon(state.settings.appIcon);
-  const selectedIcon = appIconOptions.find((option) => option.id === appIcon) || appIconOptions[0];
-  if (els.iconOptions) {
-    els.iconOptions.innerHTML = appIconOptions.map((option) => {
-      const selected = option.id === appIcon;
-      return `
-        <button class="choice-button icon-choice${selected ? " selected" : ""}" data-app-icon="${option.id}" type="button" role="radio" aria-checked="${selected}">
-          <img src="${option.preview}" alt="" width="52" height="52">
-          <span>${option.label}</span>
-        </button>
-      `;
-    }).join("");
-  }
-  if (els.iconStatus) {
-    els.iconStatus.textContent = selectedIcon.id === "default"
-      ? "目前使用預設圖示"
-      : "目前使用貓咪圖示；iPhone 主畫面圖示需重新加入才會更新";
-  }
-}
-
-function updateToolsUI() {
-  if (els.travelEnabled) els.travelEnabled.checked = state.settings.travelEnabled;
-  if (els.travelCurrency) els.travelCurrency.value = state.settings.travelCurrency;
-  updateTravelStatus();
-  renderConverter();
-  updateReminderUI();
-  updateEntryTravelUI();
 }
 
 function renderTabs() {
   $$(".view").forEach((view) => view.classList.toggle("active", view.id === `${state.currentTab}View`));
-  $$(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === state.currentTab));
+  $$(".tab").forEach((tab) => {
+    const active = tab.dataset.tab === state.currentTab;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-current", active ? "page" : "false");
+  });
   $("#addButton").hidden = state.currentTab !== "home";
+}
+
+function populateCurrencySelects() {
+  const options = travelCurrencies.map((currency) => `
+    <option value="${currency.code}">${currencyLabelText(currency)}</option>
+  `).join("");
+  els.travelCurrency.innerHTML = options;
+  els.converterAddCurrency.innerHTML = "";
+}
+
+function renderSettings() {
+  renderThemeSettings();
+  renderIconSettings();
+  renderTravelSettings();
+  renderConverter();
+  renderNotificationSettings();
+  renderCloudSyncSettings();
+  updateDataManagement();
+}
+
+function renderThemeSettings() {
+  const theme = validThemeId(state.settings.theme);
+  const themeName = themeOptions.find((option) => option.id === theme)?.name || "蜜桃";
+  els.themeSummary.textContent = themeName;
+
+  els.themeOptions.innerHTML = themeOptions.map((option) => `
+    <button class="option-button ${option.id === theme ? "selected" : ""}" type="button" data-theme="${option.id}" aria-pressed="${option.id === theme}">
+      <span class="swatch" style="background:${option.swatch}" aria-hidden="true"></span>
+      <span>${escapeHtml(option.name)}</span>
+    </button>
+  `).join("");
+
+  $$("#themeOptions [data-theme]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.settings.theme = button.dataset.theme;
+      saveSettings();
+      applySettings();
+      renderThemeSettings();
+    });
+  });
+}
+
+function renderIconSettings() {
+  const icon = validIconId(state.settings.icon);
+  const iconName = iconOptions.find((option) => option.id === icon)?.name || "貓咪";
+  els.iconSummary.textContent = iconName;
+
+  els.iconOptions.innerHTML = iconOptions.map((option) => `
+    <button class="option-button ${option.id === icon ? "selected" : ""}" type="button" data-icon="${option.id}" aria-pressed="${option.id === icon}">
+      <span class="icon-preview" style="background:${option.bg}" aria-hidden="true">${iconMarkup(option)}</span>
+      <span>${escapeHtml(option.name)}</span>
+    </button>
+  `).join("");
+
+  $$("#iconOptions [data-icon]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.settings.icon = button.dataset.icon;
+      saveSettings();
+      applySettings();
+      renderIconSettings();
+    });
+  });
+}
+
+function applySettings() {
+  const theme = validThemeId(state.settings.theme);
+  const themeOption = themeOptions.find((option) => option.id === theme) || themeOptions[0];
+  const icon = iconOptions.find((option) => option.id === validIconId(state.settings.icon)) || iconOptions[0];
+  document.body.dataset.theme = theme;
+  document.body.style.setProperty("--app-icon-bg", icon.bg);
+  els.brandIcon.innerHTML = iconMarkup(icon);
+
+  const themeMeta = document.querySelector("meta[name='theme-color']");
+  if (themeMeta) themeMeta.setAttribute("content", themeOption.color || DEFAULT_THEME_COLOR);
+}
+
+function renderTravelSettings() {
+  const currency = currencyInfoFor(state.settings.travelCurrency);
+  const rate = twdRateFor(currency.code);
+  const activeItems = state.settings.travelSessionId
+    ? state.expenses.filter((item) => item.travelSessionId === state.settings.travelSessionId)
+    : [];
+  els.travelModeEnabled.checked = Boolean(state.settings.travelModeEnabled);
+  els.travelCurrency.value = currency.code;
+  els.travelStatus.textContent = state.settings.travelModeEnabled
+    ? `${currency.code} · ${activeItems.length} 筆`
+    : `${state.trips.length} 次旅行`;
+  els.travelRateLabel.textContent = currency.code === "TWD"
+    ? "1 TWD = NT$1"
+    : `1 ${currency.code} ≈ ${formatTwdRate(rate)}${state.travelMessage ? ` · ${state.travelMessage}` : ""}`;
+}
+
+function renderConverter() {
+  const codes = selectedConverterCodes();
+  const base = currencyInfoFor(state.settings.converterBase);
+  const amount = Number(state.settings.converterAmount || 0);
+  const baseRate = twdRateFor(base.code);
+  const available = travelCurrencies.filter((currency) => !codes.includes(currency.code));
+
+  els.converterStatus.textContent = state.converterMessage || `基準 ${base.code} · ${codes.length} 幣別`;
+  els.converterList.innerHTML = codes.map((code, index) => {
+    const currency = currencyInfoFor(code);
+    const isBase = code === base.code;
+    const converted = isBase ? amount : amount > 0 ? (amount * baseRate) / twdRateFor(code) : 0;
+    return `
+      <div class="converter-row ${isBase ? "base-row" : ""}" data-code="${escapeAttr(code)}">
+        <div class="converter-meta">
+          ${currencyIconMarkup(currency, "currency-icon")}
+          <div>
+            <strong>${escapeHtml(currency.name)}</strong>
+            <span class="currency-code-line">${escapeHtml(code)}${isBase ? " · 基準" : ""}</span>
+          </div>
+        </div>
+        <div class="converter-controls" aria-label="${escapeAttr(`${currency.name} 排序與刪除`)}">
+          <button class="row-tool" data-move="up" data-code="${escapeAttr(code)}" type="button" ${index === 0 ? "disabled" : ""} aria-label="上移 ${escapeAttr(currency.name)}">↑</button>
+          <button class="row-tool" data-move="down" data-code="${escapeAttr(code)}" type="button" ${index === codes.length - 1 ? "disabled" : ""} aria-label="下移 ${escapeAttr(currency.name)}">↓</button>
+          <button class="row-tool danger-tool" data-remove="${escapeAttr(code)}" type="button" ${isBase || codes.length <= 2 ? "disabled" : ""} aria-label="刪除 ${escapeAttr(currency.name)}">×</button>
+        </div>
+        <label class="converter-input-wrap">
+          <span>${escapeHtml(currency.symbol)}</span>
+          <input
+            class="converter-input"
+            data-code="${escapeAttr(code)}"
+            inputmode="decimal"
+            autocomplete="off"
+            aria-label="${escapeAttr(`${currency.name}金額`)}"
+            value="${escapeAttr(isBase ? (state.settings.converterAmount || "") : formatConverterInput(code, converted))}"
+          >
+        </label>
+      </div>
+    `;
+  }).join("");
+
+  if (available.length) {
+    els.converterAddCurrency.innerHTML = available.map((currency) => `
+      <option value="${currency.code}">${currencyLabelText(currency)}</option>
+    `).join("");
+    els.converterAddCurrency.disabled = false;
+    els.addConverterCurrency.disabled = false;
+  } else {
+    els.converterAddCurrency.innerHTML = `<option value="">已加入所有幣別</option>`;
+    els.converterAddCurrency.disabled = true;
+    els.addConverterCurrency.disabled = true;
+  }
+
+  bindConverterRows();
+}
+
+function bindConverterRows() {
+  $$(".converter-input").forEach((input) => {
+    input.addEventListener("focus", () => setConverterBase(input.dataset.code));
+    input.addEventListener("input", () => handleConverterInput(input));
+  });
+
+  $$("[data-move]").forEach((button) => {
+    button.addEventListener("click", () => moveConverterCurrency(button.dataset.code, button.dataset.move));
+  });
+
+  $$("[data-remove]").forEach((button) => {
+    button.addEventListener("click", () => removeConverterCurrency(button.dataset.remove));
+  });
+}
+
+function handleConverterInput(input) {
+  const code = currencyInfoFor(input.dataset.code).code;
+  const normalized = normalizeConverterText(input.value);
+  input.value = normalized;
+  state.settings.converterBase = code;
+  state.settings.converterAmount = normalized;
+  saveSettings();
+  updateConverterBaseState();
+  updateConverterAmounts();
+}
+
+function setConverterBase(code) {
+  const next = currencyInfoFor(code).code;
+  if (state.settings.converterBase === next) return;
+  const input = document.querySelector(`.converter-input[data-code="${cssEscape(next)}"]`);
+  state.settings.converterBase = next;
+  state.settings.converterAmount = normalizeConverterText(input?.value || "1");
+  saveSettings();
+  updateConverterBaseState();
+  updateConverterAmounts();
+}
+
+function updateConverterBaseState() {
+  const base = currencyInfoFor(state.settings.converterBase).code;
+  const codes = selectedConverterCodes();
+  els.converterStatus.textContent = state.converterMessage || `基準 ${base} · ${codes.length} 幣別`;
+  $$(".converter-row").forEach((row) => {
+    const isBase = row.dataset.code === base;
+    const currency = currencyInfoFor(row.dataset.code);
+    row.classList.toggle("base-row", isBase);
+    const codeLine = row.querySelector(".currency-code-line");
+    if (codeLine) codeLine.textContent = `${currency.code}${isBase ? " · 基準" : ""}`;
+    const remove = row.querySelector("[data-remove]");
+    if (remove) remove.disabled = isBase || codes.length <= 2;
+  });
+}
+
+function updateConverterAmounts() {
+  const base = currencyInfoFor(state.settings.converterBase).code;
+  const amount = Number(state.settings.converterAmount || 0);
+  const baseRate = twdRateFor(base);
+  $$(".converter-input").forEach((input) => {
+    const code = currencyInfoFor(input.dataset.code).code;
+    if (code === base) return;
+    const converted = amount > 0 ? (amount * baseRate) / twdRateFor(code) : 0;
+    input.value = formatConverterInput(code, converted);
+  });
+}
+
+function addSelectedConverterCurrency() {
+  const code = currencyInfoFor(els.converterAddCurrency.value).code;
+  if (!code) return;
+  const codes = selectedConverterCodes();
+  if (codes.includes(code)) return;
+  state.settings.converterCurrencies = [...codes, code];
+  saveSettings();
+  refreshConverterRates(false);
+  renderConverter();
+}
+
+function moveConverterCurrency(code, direction) {
+  const codes = selectedConverterCodes();
+  const index = codes.indexOf(currencyInfoFor(code).code);
+  if (index < 0) return;
+  const nextIndex = direction === "up" ? index - 1 : index + 1;
+  if (nextIndex < 0 || nextIndex >= codes.length) return;
+  const next = [...codes];
+  [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+  state.settings.converterCurrencies = next;
+  saveSettings();
+  renderConverter();
+}
+
+function removeConverterCurrency(code) {
+  const target = currencyInfoFor(code).code;
+  const codes = selectedConverterCodes();
+  if (target === state.settings.converterBase || codes.length <= 2) return;
+  state.settings.converterCurrencies = codes.filter((item) => item !== target);
+  saveSettings();
+  renderConverter();
+}
+
+function renderNotificationSettings() {
+  const supported = "Notification" in window;
+  const permission = supported ? Notification.permission : "unsupported";
+  const granted = permission === "granted";
+  const locked = granted || permission === "denied" || permission === "unsupported";
+  els.reminderEnabled.checked = Boolean(state.settings.reminderEnabled);
+  els.reminderTime.value = state.settings.reminderTime || "21:00";
+  els.notificationStatus.textContent = notificationStatusText(permission);
+  els.requestNotification.disabled = locked;
+  els.requestNotification.classList.toggle("success-action", granted);
+  els.requestNotification.textContent = granted ? "✅ 已允許" : permission === "denied" ? "通知已封鎖" : supported ? "允許通知" : "不支援通知";
+}
+
+function renderCloudSyncSettings() {
+  const signedIn = Boolean(firebaseUser);
+  const configured = firebaseConfigured;
+  els.cloudUserCard.hidden = !signedIn;
+  if (signedIn) {
+    const name = firebaseUser.displayName || "Google 使用者";
+    els.cloudUserName.textContent = name;
+    els.cloudUserEmail.textContent = firebaseUser.email || "";
+    els.cloudUserAvatar.innerHTML = firebaseUser.photoURL
+      ? `<img src="${escapeAttr(firebaseUser.photoURL)}" alt="">`
+      : escapeHtml(name.slice(0, 1).toUpperCase());
+  }
+
+  els.googleSignIn.hidden = signedIn;
+  els.googleSignIn.disabled = cloudSyncInFlight || firebaseInitializing;
+  els.googleSignOut.hidden = !signedIn;
+  els.googleSignOut.disabled = cloudSyncInFlight;
+  els.syncNow.disabled = !configured || !signedIn || cloudSyncInFlight;
+
+  if (cloudSyncInFlight) {
+    els.cloudSyncStatus.textContent = "同步中";
+  } else if (state.cloudSyncMessage) {
+    els.cloudSyncStatus.textContent = state.cloudSyncMessage;
+  } else if (firebaseInitializing) {
+    els.cloudSyncStatus.textContent = "Firebase 準備中";
+  } else if (!configured) {
+    els.cloudSyncStatus.textContent = "Firebase 尚未設定";
+  } else if (!signedIn) {
+    els.cloudSyncStatus.textContent = "尚未登入";
+  } else if (state.settings.cloudSyncLastAt) {
+    els.cloudSyncStatus.textContent = `上次同步 ${timeShort(new Date(state.settings.cloudSyncLastAt))}`;
+  } else {
+    els.cloudSyncStatus.textContent = "已登入，等待同步";
+  }
+}
+
+function queueCloudSync(reason) {
+  if (cloudMergeInProgress || !firebaseConfigured || !firebaseUser || !firebaseDb) {
+    renderCloudSyncSettings();
+    return;
+  }
+  if (cloudSyncTimer) window.clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = window.setTimeout(() => performCloudSync(reason, false), 900);
+}
+
+async function performCloudSync(reason, manual) {
+  if (!firebaseConfigured) {
+    state.cloudSyncMessage = "Firebase 尚未設定";
+    renderCloudSyncSettings();
+    return;
+  }
+  if (!firebaseUser) {
+    state.cloudSyncMessage = "請先使用 Google 登入";
+    renderCloudSyncSettings();
+    if (manual) await signInWithGoogle();
+    return;
+  }
+  if (cloudSyncInFlight) return;
+
+  cloudSyncInFlight = true;
+  state.cloudSyncMessage = "同步中";
+  renderCloudSyncSettings();
+
+  try {
+    const payload = createBackupPayload();
+    await firebaseModules.setDoc(firebaseSyncRef(), {
+      ...payload,
+      reason,
+      user: firebaseUserProfile(firebaseUser),
+      clientUpdatedAt: new Date().toISOString(),
+      updatedAt: firebaseModules.serverTimestamp()
+    });
+    state.settings.cloudSyncLastAt = new Date().toISOString();
+    state.cloudSyncMessage = `已同步 ${timeShort(new Date())}`;
+    saveSettings({ sync: false });
+  } catch (error) {
+    if (canUseLegacyExpenseSync(error)) {
+      try {
+        await syncLegacyExpensesToCloud();
+        state.settings.cloudSyncLastAt = new Date().toISOString();
+        state.cloudSyncMessage = `已同步記帳資料 ${timeShort(new Date())}`;
+        saveSettings({ sync: false });
+      } catch (legacyError) {
+        state.cloudSyncMessage = manual
+          ? firestoreErrorText(legacyError)
+          : `自動同步失敗：${firestoreErrorText(legacyError)}`;
+      }
+    } else {
+      state.cloudSyncMessage = manual
+        ? firestoreErrorText(error)
+        : `自動同步失敗：${firestoreErrorText(error)}`;
+    }
+  } finally {
+    cloudSyncInFlight = false;
+    renderCloudSyncSettings();
+  }
+}
+
+async function initFirebaseSync() {
+  const config = firebaseConfig();
+  firebaseConfigured = isValidFirebaseConfig(config);
+  if (!firebaseConfigured) {
+    firebaseInitializing = false;
+    state.cloudSyncMessage = "";
+    renderCloudSyncSettings();
+    return;
+  }
+
+  try {
+    const [appModule, authModule, firestoreModule] = await Promise.all([
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth.js`),
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
+    ]);
+    firebaseModules = {
+      GoogleAuthProvider: authModule.GoogleAuthProvider,
+      browserLocalPersistence: authModule.browserLocalPersistence,
+      collection: firestoreModule.collection,
+      doc: firestoreModule.doc,
+      getDoc: firestoreModule.getDoc,
+      getDocs: firestoreModule.getDocs,
+      serverTimestamp: firestoreModule.serverTimestamp,
+      setDoc: firestoreModule.setDoc,
+      signInWithPopup: authModule.signInWithPopup,
+      signOut: authModule.signOut,
+      writeBatch: firestoreModule.writeBatch
+    };
+    firebaseApp = appModule.initializeApp(config);
+    firebaseAuth = authModule.getAuth(firebaseApp);
+    firebaseDb = firestoreModule.getFirestore(firebaseApp);
+    await authModule.setPersistence(firebaseAuth, authModule.browserLocalPersistence);
+    await authModule.getRedirectResult(firebaseAuth).catch((error) => {
+      state.cloudSyncMessage = firebaseAuthErrorText(error);
+      return null;
+    });
+    authModule.onAuthStateChanged(firebaseAuth, (user) => {
+      firebaseUser = user;
+      state.cloudSyncMessage = user ? "Google 已登入" : "";
+      renderCloudSyncSettings();
+      if (user) mergeCloudSnapshotAfterLogin();
+    });
+  } catch {
+    firebaseConfigured = false;
+    state.cloudSyncMessage = "Firebase 載入失敗";
+  } finally {
+    firebaseInitializing = false;
+    renderCloudSyncSettings();
+  }
+}
+
+async function signInWithGoogle() {
+  if (!firebaseConfigured || !firebaseAuth || !firebaseModules) {
+    state.cloudSyncMessage = "Firebase 尚未設定";
+    renderCloudSyncSettings();
+    return;
+  }
+  const provider = new firebaseModules.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  state.cloudSyncMessage = "開啟 Google 登入視窗";
+  renderCloudSyncSettings();
+  try {
+    await firebaseModules.signInWithPopup(firebaseAuth, provider);
+  } catch (error) {
+    state.cloudSyncMessage = firebaseAuthErrorText(error);
+    renderCloudSyncSettings();
+  }
+}
+
+async function signOutGoogle() {
+  if (!firebaseAuth || !firebaseModules) return;
+  await firebaseModules.signOut(firebaseAuth);
+  firebaseUser = null;
+  state.cloudSyncMessage = "已登出";
+  renderCloudSyncSettings();
+}
+
+async function mergeCloudSnapshotAfterLogin() {
+  if (!firebaseUser || !firebaseDb || !firebaseModules || cloudSyncInFlight) return;
+  cloudSyncInFlight = true;
+  cloudMergeInProgress = true;
+  state.cloudSyncMessage = "讀取雲端資料";
+  renderCloudSyncSettings();
+  let shouldQueueSync = true;
+  try {
+    const snapshot = await firebaseModules.getDoc(firebaseSyncRef());
+    if (snapshot.exists()) {
+      const result = mergeBackupIntoState(snapshot.data(), { sync: false });
+      state.cloudSyncMessage = `已合併雲端資料 · ${result.expenses} 筆`;
+      render();
+    } else {
+      const legacyResult = await mergeLegacyExpensesAfterLogin();
+      state.cloudSyncMessage = legacyResult.expenses
+        ? `已合併舊版雲端資料 · ${legacyResult.expenses} 筆`
+        : "已登入，建立雲端備份";
+      if (legacyResult.expenses) render();
+    }
+  } catch (error) {
+    if (canUseLegacyExpenseSync(error)) {
+      try {
+        const legacyResult = await mergeLegacyExpensesAfterLogin();
+        state.cloudSyncMessage = legacyResult.expenses
+          ? `已合併舊版雲端資料 · ${legacyResult.expenses} 筆`
+          : "已登入，使用舊版同步路徑";
+        if (legacyResult.expenses) render();
+      } catch (legacyError) {
+        state.cloudSyncMessage = `讀取雲端失敗：${firestoreErrorText(legacyError)}`;
+        shouldQueueSync = false;
+      }
+    } else {
+      state.cloudSyncMessage = `讀取雲端失敗：${firestoreErrorText(error)}`;
+      shouldQueueSync = false;
+    }
+  } finally {
+    cloudMergeInProgress = false;
+    cloudSyncInFlight = false;
+    renderCloudSyncSettings();
+  }
+  if (shouldQueueSync) queueCloudSync("login");
+}
+
+function firebaseSyncRef() {
+  return firebaseModules.doc(firebaseDb, "users", firebaseUser.uid, "backups", "smart-expense-tracker");
+}
+
+function firebaseExpensesCollection() {
+  return firebaseModules.collection(firebaseDb, "users", firebaseUser.uid, "expenses");
+}
+
+function firebaseExpenseRef(id) {
+  return firebaseModules.doc(firebaseDb, "users", firebaseUser.uid, "expenses", id);
+}
+
+function firebaseConfig() {
+  return window.I_EXPENSE_FIREBASE_CONFIG || {};
+}
+
+function isValidFirebaseConfig(config) {
+  return Boolean(config && config.apiKey && config.authDomain && config.projectId && config.appId);
+}
+
+function firebaseUserProfile(user) {
+  return {
+    uid: user.uid,
+    email: user.email || "",
+    displayName: user.displayName || "",
+    photoURL: user.photoURL || ""
+  };
+}
+
+function firebaseAuthErrorText(error) {
+  const code = error?.code || "";
+  if (code === "auth/unauthorized-domain") return "Firebase 未允許此網域，請加入 mmyangmm.github.io";
+  if (code === "auth/popup-blocked") return "登入視窗被瀏覽器阻擋，請允許彈出視窗後重試";
+  if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return "Google 登入尚未完成";
+  if (code === "auth/operation-not-supported-in-this-environment") return "此瀏覽器不支援彈出登入，請用 Safari 或 Chrome 開啟";
+  if (code === "auth/network-request-failed") return "網路連線失敗，請稍後再試";
+  return code ? `Google 登入失敗：${code}` : "Google 登入失敗";
+}
+
+function firestoreErrorText(error) {
+  const code = error?.code || "";
+  if (code === "permission-denied") return "Firestore 權限不足，請確認 rules 允許目前登入帳號寫入";
+  if (code === "not-found") return "Firestore 資料庫尚未建立，請先在 Firebase Console 建立 Cloud Firestore";
+  if (code === "failed-precondition") return "Firestore 尚未完成設定，請確認資料庫與 rules";
+  if (code === "unavailable") return "Firestore 暫時無法連線，請稍後再試";
+  if (code === "unauthenticated") return "Google 登入狀態已失效，請重新登入";
+  if (code) return `Firestore 同步失敗：${code}`;
+  return error?.message ? `Firestore 同步失敗：${error.message}` : "Firestore 同步失敗";
+}
+
+function canUseLegacyExpenseSync(error) {
+  return ["permission-denied", "failed-precondition", "not-found"].includes(error?.code || "");
+}
+
+async function mergeLegacyExpensesAfterLogin() {
+  const snapshot = await firebaseModules.getDocs(firebaseExpensesCollection());
+  const expenses = snapshot.docs
+    .map((docSnap) => normalizeExpenseRecord({ id: docSnap.id, ...docSnap.data() }))
+    .filter((item) => Number(item.amount) > 0 && item.date);
+  if (!expenses.length) return { expenses: 0, trips: 0 };
+  return mergeBackupIntoState({ expenses }, { sync: false });
+}
+
+async function syncLegacyExpensesToCloud() {
+  const snapshot = await firebaseModules.getDocs(firebaseExpensesCollection());
+  const remoteIds = new Set(snapshot.docs.map((docSnap) => docSnap.id));
+  const localIds = new Set(state.expenses.map((item) => item.id));
+  const operations = [];
+
+  state.expenses.forEach((item) => {
+    operations.push({
+      type: "set",
+      ref: firebaseExpenseRef(item.id),
+      data: legacyExpensePayload(item)
+    });
+  });
+  remoteIds.forEach((id) => {
+    if (!localIds.has(id)) {
+      operations.push({ type: "delete", ref: firebaseExpenseRef(id) });
+    }
+  });
+
+  for (let index = 0; index < operations.length; index += 450) {
+    const batch = firebaseModules.writeBatch(firebaseDb);
+    operations.slice(index, index + 450).forEach((operation) => {
+      if (operation.type === "set") {
+        batch.set(operation.ref, operation.data);
+      } else {
+        batch.delete(operation.ref);
+      }
+    });
+    await batch.commit();
+  }
+}
+
+function legacyExpensePayload(item) {
+  const normalized = normalizeExpenseRecord(item);
+  const payload = {
+    id: normalized.id,
+    amount: normalized.amount,
+    category: normalized.category,
+    note: normalized.note || "",
+    date: normalized.date,
+    isIncome: Boolean(normalized.isIncome),
+    updatedAt: recordMillis(normalized.updatedAt || normalized.date)
+  };
+  if (normalized.currency) payload.currency = normalized.currency;
+  if (Number.isFinite(Number(normalized.originalAmount))) {
+    payload.originalAmount = Number(normalized.originalAmount);
+  }
+  if (Number.isFinite(Number(normalized.exchangeRate))) {
+    payload.exchangeRate = Number(normalized.exchangeRate);
+  }
+  if (normalized.travelSessionId) payload.travelSessionId = normalized.travelSessionId;
+  return payload;
+}
+
+function updateDataManagement() {
+  const bytes = new Blob([JSON.stringify(createBackupPayload())]).size;
+  const kb = Math.max(1, Math.ceil(bytes / 1024));
+  els.dataCount.textContent = `${state.expenses.length} 筆 · ${state.trips.length} 次旅行 · ${kb} KB`;
+}
+
+function toggleTravelMode(enabled) {
+  const wasEnabled = Boolean(state.settings.travelModeEnabled);
+  state.settings.travelModeEnabled = enabled;
+
+  if (enabled && !wasEnabled) {
+    state.settings.travelSessionId = makeId();
+    state.settings.travelStartedAt = new Date().toISOString();
+  }
+
+  if (!enabled && wasEnabled) {
+    finishTravelSession();
+  }
+
+  saveSettings();
+  renderSettings();
+  renderAmountDisplay();
+  if (enabled) refreshTravelRate(false);
+}
+
+function finishTravelSession() {
+  const sessionId = state.settings.travelSessionId;
+  if (!sessionId) return;
+  const items = state.expenses.filter((item) => item.travelSessionId === sessionId);
+  if (items.length) {
+    const trip = {
+      id: sessionId,
+      startedAt: state.settings.travelStartedAt || items[items.length - 1].date,
+      endedAt: new Date().toISOString(),
+      currency: state.settings.travelCurrency,
+      count: items.length,
+      expenseTotal: sum(items.filter((item) => !item.isIncome)),
+      incomeTotal: sum(items.filter((item) => item.isIncome))
+    };
+    state.trips = [trip, ...state.trips.filter((item) => item.id !== sessionId)];
+    saveTrips();
+  }
+  state.settings.travelSessionId = "";
+  state.settings.travelStartedAt = "";
+}
+
+function activeTravelCurrency() {
+  return state.settings.travelModeEnabled ? currencyInfoFor(state.settings.travelCurrency).code : "TWD";
+}
+
+async function refreshTravelRate(force) {
+  const currency = currencyInfoFor(state.settings.travelCurrency);
+  state.travelMessage = "更新中";
+  renderTravelSettings();
+  try {
+    await fetchTwdRate(currency.code, force);
+    state.travelMessage = "已更新";
+  } catch {
+    state.travelMessage = "使用估算";
+  } finally {
+    renderTravelSettings();
+    renderAmountDisplay();
+  }
+}
+
+async function refreshRatesForSettings(force) {
+  await Promise.allSettled([
+    refreshTravelRate(force),
+    refreshConverterRates(force)
+  ]);
+}
+
+async function refreshConverterRates(force) {
+  const base = currencyInfoFor(state.settings.converterBase).code;
+  const targetCodes = selectedConverterCodes();
+  state.converterMessage = "匯率更新中";
+  els.refreshConverterRates.disabled = true;
+  renderConverter();
+  try {
+    await Promise.all(targetCodes.map((code) => fetchTwdRate(code, force)));
+    state.converterMessage = `已更新 ${timeShort(new Date())}`;
+  } catch {
+    state.converterMessage = "使用離線估算";
+  } finally {
+    els.refreshConverterRates.disabled = false;
+    renderConverter();
+  }
+}
+
+async function fetchTwdRate(code, force = false) {
+  const currency = currencyInfoFor(code).code;
+  if (currency === "TWD") {
+    state.rateCache.TWD = { rate: 1, updatedAt: new Date().toISOString(), source: "base" };
+    saveRateCache();
+    return 1;
+  }
+
+  const cached = state.rateCache[currency];
+  const fresh = cached && Date.now() - new Date(cached.updatedAt).getTime() < 12 * 60 * 60 * 1000;
+  if (!force && fresh) return cached.rate;
+
+  try {
+    const response = await fetch(`https://open.er-api.com/v6/latest/${currency}`, { cache: force ? "reload" : "default" });
+    if (!response.ok) throw new Error("Rate fetch failed");
+    const payload = await response.json();
+    const rate = Number(payload?.rates?.TWD);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error("Missing TWD rate");
+    state.rateCache[currency] = { rate, updatedAt: new Date().toISOString(), source: "live" };
+    saveRateCache();
+    return rate;
+  } catch (error) {
+    const fallback = fallbackTwdRates[currency];
+    if (!Number.isFinite(fallback)) throw error;
+    state.rateCache[currency] = {
+      rate: fallback,
+      updatedAt: cached?.updatedAt || new Date().toISOString(),
+      source: "fallback"
+    };
+    saveRateCache();
+    return fallback;
+  }
+}
+
+function twdRateFor(code) {
+  const currency = currencyInfoFor(code).code;
+  return Number(state.rateCache[currency]?.rate || fallbackTwdRates[currency] || 1);
+}
+
+async function updateReminderEnabled(enabled) {
+  if (!enabled) {
+    state.settings.reminderEnabled = false;
+    saveSettings();
+    renderNotificationSettings();
+    scheduleReminder();
+    return;
+  }
+
+  const granted = await requestNotificationPermission();
+  state.settings.reminderEnabled = granted;
+  saveSettings();
+  renderNotificationSettings();
+  scheduleReminder();
+}
+
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) {
+    state.settings.reminderEnabled = false;
+    saveSettings();
+    renderNotificationSettings();
+    return false;
+  }
+
+  if (Notification.permission === "granted") {
+    renderNotificationSettings();
+    return true;
+  }
+
+  if (Notification.permission === "denied") {
+    state.settings.reminderEnabled = false;
+    saveSettings();
+    renderNotificationSettings();
+    return false;
+  }
+
+  const permission = await Notification.requestPermission();
+  renderNotificationSettings();
+  return permission === "granted";
+}
+
+function scheduleReminder() {
+  if (reminderTimer) {
+    clearTimeout(reminderTimer);
+    reminderTimer = null;
+  }
+  if (!state.settings.reminderEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
+
+  const next = nextReminderDate(state.settings.reminderTime || "21:00");
+  reminderTimer = window.setTimeout(() => {
+    showReminderNotification(false);
+    scheduleReminder();
+  }, next.getTime() - Date.now());
+}
+
+async function showReminderNotification(test) {
+  const granted = await requestNotificationPermission();
+  if (!granted) {
+    window.alert("通知尚未允許。");
+    return;
+  }
+
+  try {
+    new Notification(test ? "測試通知" : "記帳提醒", {
+      body: test ? "通知功能已可使用。" : "別忘了記錄今天的花費。",
+      icon: "./assets/icon-192.png",
+      badge: "./assets/icon-192.png"
+    });
+  } catch {
+    window.alert(test ? "通知功能已可使用。" : "別忘了記錄今天的花費。");
+  }
+}
+
+function notificationStatusText(permission) {
+  if (permission === "unsupported") return "此瀏覽器不支援";
+  if (permission === "denied") return "通知被封鎖";
+  if (state.settings.reminderEnabled && permission === "granted") return `每天 ${state.settings.reminderTime || "21:00"}`;
+  if (permission === "granted") return "已允許";
+  return "尚未允許";
+}
+
+function nextReminderDate(value) {
+  const [hour = "21", minute = "00"] = String(value).split(":");
+  const next = new Date();
+  next.setHours(Number(hour), Number(minute), 0, 0);
+  if (next.getTime() <= Date.now()) next.setDate(next.getDate() + 1);
+  return next;
 }
 
 function renderHome() {
@@ -470,7 +1158,7 @@ function renderHome() {
   document.querySelector("[data-month='1']").disabled = isCurrent;
   els.monthExpense.textContent = formatCurrency(expenseTotal);
   els.monthIncome.textContent = formatCurrency(incomeTotal);
-  els.monthBalance.textContent = formatCurrency(incomeTotal - expenseTotal);
+  els.currentExpenseLabel.textContent = formatCurrency(expenseTotal);
   els.averageLabel.textContent = average > 0 ? formatCurrency(average) : "無歷史資料";
   els.averageMeter.style.width = `${Math.min(100, average > 0 ? (expenseTotal / average) * 100 : expenseTotal > 0 ? 100 : 0)}%`;
   els.recordCount.textContent = `${monthItems.length} 筆`;
@@ -495,7 +1183,7 @@ function renderCategoryStrip(expenseItems, expenseTotal) {
     return `
       <div class="category-chip">
         <span class="emoji" style="background:${hexToSoft(category.color)}">${category.emoji}</span>
-        <span class="name">${category.name} · ${pct}%</span>
+        <span class="name">${escapeHtml(category.name)} · ${pct}%</span>
         <strong>${formatCurrency(totals[category.id])}</strong>
       </div>
     `;
@@ -512,14 +1200,16 @@ function renderTransactions(items) {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map((item) => {
       const category = findCategory(item.category);
+      const travelCopy = travelAmountCopy(item);
+      const subline = `${formatDateTime(item.date)} · ${category.name}${travelCopy ? ` · ${travelCopy}` : ""}`;
       return `
-        <button class="transaction-row" type="button" data-id="${item.id}">
+        <button class="transaction-row" type="button" data-id="${escapeAttr(item.id)}" aria-label="${escapeAttr(`${item.note || category.name} ${formatCurrency(item.amount)}`)}">
           <span class="row-icon" style="background:${hexToSoft(category.color)}">${category.emoji}</span>
           <span class="row-main">
             <strong>${escapeHtml(item.note || category.name)}</strong>
-            <time>${formatDateTime(item.date)} · ${category.name}</time>
+            <time class="row-subline">${escapeHtml(subline)}</time>
           </span>
-          <span class="row-amount ${item.isIncome ? "income" : "expense"}">${formatEntryAmount(item)}</span>
+          <span class="row-amount ${item.isIncome ? "income" : "expense"}">${item.isIncome ? "+" : ""}${formatCurrency(item.amount)}</span>
         </button>
       `;
     }).join("");
@@ -549,32 +1239,75 @@ function renderCategoryStats(expenseItems) {
   els.statsCount.textContent = rows.length ? `${rows.length} 類` : "";
 
   if (!rows.length) {
+    els.chartCanvas.removeAttribute("role");
+    els.chartCanvas.removeAttribute("aria-label");
     els.chartCanvas.innerHTML = $("#emptyTemplate").innerHTML;
     els.statsList.innerHTML = "";
     return;
   }
 
-  els.chartCanvas.innerHTML = rows.map((category) => {
-    const amount = totals[category.id];
-    const pct = Math.round((amount / total) * 100);
-    return `
-      <div class="bar-row">
-        <strong>${category.emoji} ${category.name}</strong>
-        <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:${category.color}"></span></span>
-        <span>${pct}%</span>
-      </div>
-    `;
-  }).join("");
+  els.chartCanvas.setAttribute("role", "img");
+  els.chartCanvas.setAttribute("aria-label", `本月支出共 ${formatCurrency(total)}，最高分類為 ${rows[0].name}`);
+  els.chartCanvas.innerHTML = renderPieChart(rows, totals, total);
 
   els.statsList.innerHTML = rows.map((category) => `
     <div class="stats-item">
       <div>
-        <strong>${category.emoji} ${category.name}</strong>
+        <strong>${category.emoji} ${escapeHtml(category.name)}</strong>
         <div class="stats-meta">${currentMonthItems().filter((item) => item.category === category.id).length} 筆</div>
       </div>
       <strong>${formatCurrency(totals[category.id])}</strong>
     </div>
   `).join("");
+}
+
+function renderPieChart(rows, totals, total) {
+  const radius = 72;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  const slices = rows.map((category) => {
+    const amount = totals[category.id];
+    const length = total > 0 ? (amount / total) * circumference : 0;
+    const dash = rows.length === 1 ? circumference : Math.max(0.8, length);
+    const circle = `
+      <circle
+        cx="100"
+        cy="100"
+        r="${radius}"
+        stroke="${category.color}"
+        stroke-dasharray="${dash} ${circumference - dash}"
+        stroke-dashoffset="${-offset}"
+        transform="rotate(-90 100 100)"
+      ></circle>
+    `;
+    offset += length;
+    return circle;
+  }).join("");
+
+  const legend = rows.map((category) => {
+    const amount = totals[category.id];
+    const pct = Math.round((amount / total) * 100);
+    return `
+      <div class="pie-legend-item">
+        <span class="pie-dot" style="background:${category.color}" aria-hidden="true"></span>
+        <strong>${category.emoji} ${escapeHtml(category.name)}</strong>
+        <span>${pct}%</span>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="pie-wrap">
+      <svg class="pie-chart" viewBox="0 0 200 200" aria-hidden="true">
+        <circle cx="100" cy="100" r="${radius}" stroke="var(--border)"></circle>
+        ${slices}
+        <circle class="pie-hole" cx="100" cy="100" r="48"></circle>
+        <text class="pie-caption" x="100" y="88">支出分佈</text>
+        <text class="pie-center" x="100" y="106">${escapeHtml(compactCurrency(total))}</text>
+      </svg>
+      <div class="pie-legend">${legend}</div>
+    </div>
+  `;
 }
 
 function renderDailyStats(expenseItems) {
@@ -583,17 +1316,21 @@ function renderDailyStats(expenseItems) {
   els.statsCount.textContent = daily.length ? `${daily.length} 天` : "";
 
   if (!daily.length) {
+    els.chartCanvas.removeAttribute("role");
+    els.chartCanvas.removeAttribute("aria-label");
     els.chartCanvas.innerHTML = $("#emptyTemplate").innerHTML;
     els.statsList.innerHTML = "";
     return;
   }
 
+  els.chartCanvas.setAttribute("role", "img");
+  els.chartCanvas.setAttribute("aria-label", `本月共有 ${daily.length} 天支出紀錄，最高單日 ${formatCurrency(max)}`);
   els.chartCanvas.innerHTML = daily.map((day) => {
     const pct = max > 0 ? Math.round((day.amount / max) * 100) : 0;
     return `
       <div class="bar-row">
-        <strong>${day.label}</strong>
-        <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:#2f8f83"></span></span>
+        <strong>${escapeHtml(day.label)}</strong>
+        <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:var(--primary)"></span></span>
         <span>${formatCurrency(day.amount)}</span>
       </div>
     `;
@@ -602,7 +1339,7 @@ function renderDailyStats(expenseItems) {
   els.statsList.innerHTML = daily.map((day) => `
     <div class="stats-item">
       <div>
-        <strong>${day.label}</strong>
+        <strong>${escapeHtml(day.label)}</strong>
         <div class="stats-meta">${day.count} 筆</div>
       </div>
       <strong>${formatCurrency(day.amount)}</strong>
@@ -610,54 +1347,73 @@ function renderDailyStats(expenseItems) {
   `).join("");
 }
 
-function openEntryDialog(id = "", draft = null) {
+function openEntryDialog(id = "") {
   const item = state.expenses.find((expense) => expense.id === id);
   const isEditing = Boolean(item);
+  resetTransientEntryState();
   els.dialogTitle.textContent = isEditing ? "編輯記錄" : "快速記帳";
   els.entryId.value = item?.id || "";
-  els.amountInput.value = draft ? String(draft.amount) : item ? String(Math.round(item.originalAmount || item.amount)) : "";
-  els.noteInput.value = draft?.note || item?.note || "";
-  els.dateInput.value = toLocalInputValue(draft?.date ? new Date(draft.date) : item ? new Date(item.date) : new Date());
-  setEntryType(draft?.isIncome ? "income" : item?.isIncome ? "income" : "expense");
-  hydrateCategoryOptions(entryType());
-  els.categoryInput.value = draft?.category || item?.category || defaultCategoryId(entryType());
+  state.activeEntryCurrency = item ? (item.currency || "TWD") : activeTravelCurrency();
+  els.amountInput.value = item ? trimAmount(item.originalAmount || item.amount) : "";
+  els.noteInput.value = item?.note || "";
+  els.dateInput.value = toLocalInputValue(item ? new Date(item.date) : new Date());
+  setEntryType(item?.isIncome ? "income" : "expense");
+  els.categoryInput.value = categoryMatchesType(item?.category, entryType()) ? item.category : defaultCategoryId(entryType());
   els.deleteEntry.hidden = !isEditing;
-  updateEntryTravelUI(item);
+  renderCategoryPicker();
+  renderAmountDisplay();
+  renderVoiceStatus();
+  renderScanStatus();
   els.dialog.showModal();
-  setTimeout(() => els.amountInput.focus(), 50);
 }
 
 function closeDialog() {
+  stopVoiceRecognition(false);
   els.dialog.close();
   els.entryForm.reset();
-  if (els.voiceText) els.voiceText.value = "";
-  if (els.voiceStatus) els.voiceStatus.textContent = "可說或貼上「午餐 120」這類文字";
+  resetTransientEntryState();
+}
+
+function resetTransientEntryState() {
+  state.voiceTranscript = "";
+  state.voiceMessage = "";
+  state.scanMessage = "";
+  state.isScanning = false;
+  state.shouldParseOnStop = false;
+  state.activeEntryCurrency = null;
+  els.amountError.hidden = true;
+  els.receiptInput.value = "";
 }
 
 function saveEntry(event) {
   event.preventDefault();
-  const amount = Number(els.amountInput.value.replace(/,/g, ""));
-  if (!Number.isFinite(amount) || amount <= 0) {
-    els.amountInput.focus();
+  const enteredAmount = Number(els.amountInput.value.replace(/,/g, ""));
+  if (!Number.isFinite(enteredAmount) || enteredAmount <= 0) {
+    els.amountError.hidden = false;
+    renderAmountDisplay();
     return;
   }
 
   const id = els.entryId.value || makeId();
-  const existing = state.expenses.find((item) => item.id === id);
-  const travel = travelPayloadForEntry(amount, existing);
+  const currency = state.activeEntryCurrency || activeTravelCurrency();
+  const rate = twdRateFor(currency);
+  const isForeign = currency !== "TWD";
+  const convertedAmount = isForeign ? roundMoney(enteredAmount * rate) : enteredAmount;
   const next = {
     id,
-    amount: travel?.amountTwd ?? amount,
+    amount: convertedAmount,
     category: els.categoryInput.value,
     note: els.noteInput.value.trim(),
     date: new Date(els.dateInput.value).toISOString(),
     isIncome: entryType() === "income",
-    updatedAt: Date.now()
+    updatedAt: new Date().toISOString()
   };
-  if (travel) {
-    next.currency = travel.currency;
-    next.originalAmount = amount;
-    next.travelSessionId = travel.travelSessionId;
+
+  if (isForeign) {
+    next.originalAmount = enteredAmount;
+    next.currency = currency;
+    next.exchangeRate = rate;
+    next.travelSessionId = state.settings.travelSessionId || "";
   }
 
   const index = state.expenses.findIndex((item) => item.id === id);
@@ -668,7 +1424,6 @@ function saveEntry(event) {
   }
 
   persist();
-  upsertCloudExpense(next);
   closeDialog();
   render();
 }
@@ -680,458 +1435,340 @@ function deleteEntry() {
   if (!ok) return;
   state.expenses = state.expenses.filter((item) => item.id !== id);
   persist();
-  deleteCloudExpense(id);
   closeDialog();
   render();
 }
 
-function hydrateCategoryOptions(type) {
-  els.categoryInput.innerHTML = categories
+function renderCategoryPicker() {
+  const type = entryType();
+  if (!categoryMatchesType(els.categoryInput.value, type)) {
+    els.categoryInput.value = defaultCategoryId(type);
+  }
+
+  const selected = els.categoryInput.value;
+  els.categoryGrid.innerHTML = categories
     .filter((category) => category.type === type)
-    .map((category) => `<option value="${category.id}">${category.emoji} ${category.name}</option>`)
-    .join("");
+    .map((category) => `
+      <button
+        class="category-option ${category.id === selected ? "selected" : ""}"
+        type="button"
+        role="radio"
+        aria-checked="${category.id === selected ? "true" : "false"}"
+        data-category="${escapeAttr(category.id)}"
+        style="--category-color:${category.color};--category-soft:${hexToSoft(category.color)}"
+      >
+        <span class="category-emoji">${category.emoji}</span>
+        <span>${escapeHtml(category.name)}</span>
+      </button>
+    `).join("");
+
+  $$(".category-option").forEach((button) => {
+    button.addEventListener("click", () => {
+      els.categoryInput.value = button.dataset.category;
+      renderCategoryPicker();
+    });
+  });
 }
 
 function inferCategoryFromNote() {
   const text = els.noteInput.value.trim().toLowerCase();
   if (!text) return;
   const type = entryType();
-  const matched = categories.find((category) =>
-    category.type === type && category.keywords.some((keyword) => text.includes(keyword.toLowerCase()))
-  );
-  if (matched) els.categoryInput.value = matched.id;
+  const matched = matchCategory(text, type);
+  if (matched) {
+    els.categoryInput.value = matched.id;
+    renderCategoryPicker();
+  }
+}
+
+function handleCalcKey(key) {
+  let value = els.amountInput.value;
+  if (key === "delete") {
+    value = value.slice(0, -1);
+  } else if (key === ".") {
+    if (!value.includes(".")) value = value ? `${value}.` : "0.";
+  } else if (/^\d$/.test(key)) {
+    if (value === "0") {
+      value = key;
+    } else if (value.length < 10) {
+      value += key;
+    }
+  }
+
+  els.amountInput.value = normalizeAmountText(value);
+  els.amountError.hidden = true;
+  renderAmountDisplay();
+}
+
+function renderAmountDisplay() {
+  const amountText = els.amountInput.value;
+  const isIncome = entryType() === "income";
+  const hasValue = Number(amountText) > 0;
+  const currency = state.activeEntryCurrency || activeTravelCurrency();
+  const rate = twdRateFor(currency);
+  const currencyInfo = currencyInfoFor(currency);
+  const amount = Number(amountText);
+  els.amountDisplay.textContent = amountText ? formatAmountForDisplay(amountText) : "0";
+  els.amountSign.textContent = isIncome ? "+" : "−";
+  els.currencySymbol.textContent = currencyInfo.symbol;
+  els.amountCard.classList.toggle("income-amount", isIncome);
+  els.amountDisplay.style.color = hasValue ? "" : "var(--border)";
+  els.saveEntry.disabled = !hasValue;
+  els.twdHint.hidden = !(currency !== "TWD" && hasValue);
+  els.twdHint.textContent = currency !== "TWD" && hasValue ? `約 ${formatCurrency(amount * rate)} · 1 ${currency} ≈ ${formatTwdRate(rate)}` : "";
+}
+
+function handleVoiceTap() {
+  if (state.isRecording) {
+    stopVoiceRecognition(true);
+  } else {
+    startVoiceRecognition();
+  }
+}
+
+function startVoiceRecognition() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    state.voiceMessage = "此瀏覽器暫不支援語音辨識";
+    state.voiceTranscript = "";
+    renderVoiceStatus();
+    return;
+  }
+
+  stopVoiceRecognition(false);
+  state.voiceTranscript = "";
+  state.voiceMessage = "正在聆聽…";
+  state.shouldParseOnStop = false;
+  state.isRecording = true;
+
+  const recognition = new Recognition();
+  recognition.lang = "zh-TW";
+  recognition.interimResults = true;
+  recognition.continuous = true;
+
+  recognition.onresult = (event) => {
+    const transcript = Array.from(event.results)
+      .map((result) => result[0]?.transcript || "")
+      .join("")
+      .trim();
+    state.voiceTranscript = transcript;
+    state.voiceMessage = transcript || "正在聆聽…";
+    renderVoiceStatus();
+  };
+
+  recognition.onerror = () => {
+    state.voiceMessage = "語音辨識中斷，請再試一次";
+    state.isRecording = false;
+    renderVoiceStatus();
+  };
+
+  recognition.onend = () => {
+    const shouldParse = state.shouldParseOnStop;
+    state.isRecording = false;
+    renderVoiceStatus();
+    if (shouldParse) parseVoiceTranscript();
+  };
+
+  state.recognition = recognition;
+  renderVoiceStatus();
+  try {
+    recognition.start();
+  } catch {
+    state.voiceMessage = "語音辨識啟動失敗";
+    state.isRecording = false;
+    renderVoiceStatus();
+  }
+}
+
+function stopVoiceRecognition(shouldParse) {
+  state.shouldParseOnStop = shouldParse;
+  if (!state.recognition) {
+    state.isRecording = false;
+    if (shouldParse) parseVoiceTranscript();
+    return;
+  }
+
+  try {
+    state.recognition.stop();
+  } catch {
+    state.isRecording = false;
+    if (shouldParse) parseVoiceTranscript();
+  }
+}
+
+function parseVoiceTranscript() {
+  const transcript = state.voiceTranscript.trim();
+  if (!transcript) {
+    state.voiceMessage = "沒有聽到內容";
+    renderVoiceStatus();
+    return;
+  }
+
+  const amount = extractAmount(transcript);
+  const type = inferEntryType(transcript);
+  setEntryType(type);
+  if (amount) els.amountInput.value = trimAmount(amount);
+
+  const matched = matchCategory(transcript, type);
+  const cleanedNote = cleanVoiceNote(transcript);
+  const noteMatched = cleanedNote ? matchCategory(cleanedNote, type) : null;
+  els.categoryInput.value = matched?.id || noteMatched?.id || defaultCategoryId(type);
+  if (cleanedNote) els.noteInput.value = cleanedNote;
+
+  const selectedCategory = findCategory(els.categoryInput.value);
+  state.voiceMessage = `已解析：${selectedCategory.name} · ${transcript}`;
+  renderCategoryPicker();
+  renderAmountDisplay();
+  renderVoiceStatus();
+}
+
+function renderVoiceStatus() {
+  els.voiceButton.classList.toggle("recording", state.isRecording);
+  els.voiceButton.setAttribute("aria-label", state.isRecording ? "停止語音辨識" : "語音記帳");
+  els.voiceLabel.textContent = state.isRecording ? "停止語音辨識" : "語音記帳";
+  const message = state.voiceMessage || state.voiceTranscript;
+  els.voiceBanner.hidden = !message;
+  els.voiceBanner.textContent = message ? `${state.isRecording ? "◌" : "✓"} ${message}` : "";
+}
+
+async function handleReceiptInput(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  state.isScanning = true;
+  state.scanMessage = "正在辨識收據…";
+  renderScanStatus();
+
+  try {
+    const result = await detectReceipt(file);
+    if (result.amount) {
+      els.amountInput.value = trimAmount(result.amount);
+      if (!els.noteInput.value.trim()) els.noteInput.value = result.note || "掃描收據";
+      const matched = matchCategory(`${result.note || ""} ${file.name}`.toLowerCase(), entryType());
+      if (matched) els.categoryInput.value = matched.id;
+      state.scanMessage = `已帶入金額 ${formatCurrency(result.amount)}`;
+    } else {
+      state.scanMessage = result.message || "未辨識到金額，請手動輸入";
+    }
+  } catch {
+    state.scanMessage = "掃描失敗，請手動輸入";
+  } finally {
+    state.isScanning = false;
+    els.receiptInput.value = "";
+    renderCategoryPicker();
+    renderAmountDisplay();
+    renderScanStatus();
+  }
+}
+
+async function detectReceipt(file) {
+  if (!("BarcodeDetector" in window) || !("createImageBitmap" in window)) {
+    return { amount: extractAmount(file.name), note: "掃描收據", message: "此瀏覽器暫不支援收據辨識，請手動輸入" };
+  }
+
+  const supported = await window.BarcodeDetector.getSupportedFormats?.();
+  const preferred = ["qr_code", "aztec", "pdf417", "code_128", "ean_13", "ean_8"];
+  const formats = Array.isArray(supported) ? preferred.filter((format) => supported.includes(format)) : preferred;
+  if (!formats.length) {
+    return { amount: extractAmount(file.name), note: "掃描收據", message: "此瀏覽器暫不支援收據辨識，請手動輸入" };
+  }
+
+  const detector = new window.BarcodeDetector({ formats });
+  const bitmap = await createImageBitmap(file);
+  const codes = await detector.detect(bitmap);
+  bitmap.close?.();
+  const text = codes.map((code) => code.rawValue || "").join(" ");
+  const amount = extractReceiptAmount(text) || extractAmount(file.name);
+  return {
+    amount,
+    note: text.includes("**") || /^[A-Z]{2}\d{8}/.test(text) ? "電子發票" : "掃描收據",
+    message: amount ? "" : "未辨識到金額，請手動輸入"
+  };
+}
+
+function renderScanStatus() {
+  els.scanBanner.hidden = !state.scanMessage;
+  els.scanBanner.textContent = state.scanMessage ? `${state.isScanning ? "◌" : "✓"} ${state.scanMessage}` : "";
 }
 
 function entryType() {
-  return document.querySelector("input[name='entryType']:checked").value;
+  return document.querySelector("input[name='entryType']:checked")?.value || "expense";
 }
 
 function setEntryType(type) {
-  document.querySelector(`input[name='entryType'][value='${type}']`).checked = true;
+  const target = document.querySelector(`input[name='entryType'][value='${type}']`);
+  if (target) target.checked = true;
 }
 
 function defaultCategoryId(type) {
   return type === "income" ? "salary" : "food";
 }
 
-function setupVoiceUI() {
-  const supported = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-  if (!els.voiceButton) return;
-  els.voiceButton.disabled = !supported;
-  if (!supported) {
-    els.voiceStatus.textContent = "此瀏覽器不支援即時語音，可直接貼文字解析";
-  }
+function categoryMatchesType(id, type) {
+  return categories.some((category) => category.id === id && category.type === type);
 }
 
-function toggleVoiceInput() {
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition) {
-    window.alert("此瀏覽器不支援即時語音辨識，請改用文字解析。");
-    return;
-  }
-
-  if (speechRecognition) {
-    speechRecognition.stop();
-    speechRecognition = null;
-    els.voiceButton.textContent = "語音";
-    els.voiceButton.classList.remove("recording");
-    els.voiceStatus.textContent = "已停止聽寫";
-    return;
-  }
-
-  speechRecognition = new Recognition();
-  speechRecognition.lang = "zh-TW";
-  speechRecognition.interimResults = true;
-  speechRecognition.continuous = false;
-  els.voiceButton.textContent = "停止";
-  els.voiceButton.classList.add("recording");
-  els.voiceStatus.textContent = "正在聽寫...";
-
-  speechRecognition.onresult = (event) => {
-    const text = Array.from(event.results).map((result) => result[0]?.transcript || "").join("");
-    els.voiceText.value = text.trim();
-    if (event.results[event.results.length - 1]?.isFinal) {
-      els.voiceStatus.textContent = "聽寫完成，可解析成記帳";
-    }
-  };
-  speechRecognition.onerror = () => {
-    els.voiceStatus.textContent = "語音辨識失敗，請改用文字解析";
-  };
-  speechRecognition.onend = () => {
-    speechRecognition = null;
-    els.voiceButton.textContent = "語音";
-    els.voiceButton.classList.remove("recording");
-  };
-  speechRecognition.start();
+function matchCategory(text, type) {
+  const normalized = normalizeSpeechText(text);
+  return categories.find((category) => {
+    if (category.type !== type) return false;
+    const terms = [category.name, category.id, ...category.keywords].filter(Boolean);
+    return terms.some((term) => normalized.includes(normalizeSpeechText(term)));
+  });
 }
 
-function parseVoiceDraft() {
-  const text = els.voiceText.value.trim();
-  const draft = parseVoiceText(text);
-  if (!draft) {
-    window.alert("請輸入像「午餐 120 元」或「薪資 30000」這樣的內容。");
-    return;
-  }
-  applyVoiceDraftToEntry(draft);
-  if (els.voiceStatus) els.voiceStatus.textContent = "已解析，可確認後儲存";
+function inferEntryType(text) {
+  const normalized = text.toLowerCase();
+  const incomeWords = ["收入", "薪水", "薪資", "獎金", "入帳", "股利", "利息", "退款", "退費", "收租", "租金", "兼職", "接案", "紅包"];
+  return incomeWords.some((word) => normalized.includes(word)) ? "income" : "expense";
 }
 
-function applyVoiceDraftToEntry(draft) {
-  if (!els.dialog.open) openEntryDialog("", draft);
-  els.amountInput.value = String(draft.amount);
-  els.noteInput.value = draft.note;
-  els.dateInput.value = toLocalInputValue(new Date(draft.date));
-  setEntryType(draft.isIncome ? "income" : "expense");
-  hydrateCategoryOptions(entryType());
-  els.categoryInput.value = draft.category;
-  inferCategoryFromNote();
-  updateEntryTravelUI();
-}
-
-function parseVoiceText(text) {
+function extractReceiptAmount(text) {
   if (!text) return null;
-  const amountMatch = text.match(/(?:NT\$|NTD|TWD|\$|＄)?\s*(\d+(?:[,.]\d+)?)\s*(?:元|塊|块|日圓|円|美金|美元|dollars?|yen)?/i);
-  if (!amountMatch) return null;
-  const amount = Number(amountMatch[1].replace(/,/g, ""));
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-
-  const lowered = text.toLowerCase();
-  const matchedCategory = categories.find((category) =>
-    category.keywords.some((keyword) => lowered.includes(keyword.toLowerCase())) || lowered.includes(category.name.toLowerCase())
-  );
-  const incomeHint = /(收入|薪水|薪資|入帳|獎金|兼職|打工|投資|利息|股利|salary|bonus|income)/i.test(text);
-  const isIncome = matchedCategory ? matchedCategory.type === "income" : incomeHint;
-  const note = text
-    .replace(amountMatch[0], "")
-    .replace(/^(我|幫我|記一下|記帳|新增|花了|支出|收入)\s*/g, "")
-    .trim() || (matchedCategory?.name || (isIncome ? "收入" : "支出"));
-
-  return {
-    amount,
-    category: matchedCategory?.type === (isIncome ? "income" : "expense") ? matchedCategory.id : defaultCategoryId(isIncome ? "income" : "expense"),
-    note,
-    date: new Date().toISOString(),
-    isIncome
-  };
-}
-
-function updateTravelStatus() {
-  if (!els.travelRateStatus) return;
-  const currency = findCurrency(state.settings.travelCurrency);
-  if (!state.settings.travelEnabled) {
-    els.travelRateStatus.textContent = "以台幣記帳";
-    return;
+  const chunks = text.split(/\s+/).filter(Boolean);
+  for (const chunk of chunks) {
+    const invoiceAmount = parseTaiwanInvoiceQr(chunk);
+    if (invoiceAmount) return invoiceAmount;
   }
-  els.travelRateStatus.innerHTML = `${currencyFlagMarkup(currency)} ${currency.code} 記帳，1 ${currency.code} ≈ NT$${formatRateValue(rateToTwd(currency.code))}`;
+  return extractAmount(text);
 }
 
-async function fetchTravelRate() {
-  const code = state.settings.travelCurrency;
-  if (code === "TWD") {
-    state.settings.travelRateToTwd = 1;
-    persistSettings();
-    updateToolsUI();
-    return;
+function parseTaiwanInvoiceQr(raw) {
+  const value = raw.trim();
+  if (!/^[A-Z]{2}\d{8}/.test(value) || value.length < 37) return null;
+  const totalHex = value.slice(29, 37);
+  if (!/^[0-9a-f]{8}$/i.test(totalHex)) return null;
+  const amount = parseInt(totalHex, 16);
+  return amount > 0 && amount < 10000000 ? amount : null;
+}
+
+function extractAmount(text) {
+  const normalized = String(text).replace(/[，,]/g, "");
+  const patterns = [
+    /(?:NT\$|NTD|TWD|台幣|\$)\s*(\d+(?:\.\d+)?)/i,
+    /(?:合計|總計|小計|total|amount)[：:\s]*(\d+(?:\.\d+)?)/i,
+    /(\d+(?:\.\d+)?)\s*(?:元|塊|圓)/
+  ];
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (match) return Number(match[1]);
   }
-  if (els.travelRateStatus) els.travelRateStatus.textContent = "更新匯率中...";
-  try {
-    const response = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(code)}`);
-    if (!response.ok) throw new Error("rate fetch failed");
-    const data = await response.json();
-    const rate = Number(data.rates?.TWD);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error("missing TWD rate");
-    state.settings.travelRateToTwd = rate;
-    state.settings.travelRateUpdatedAt = new Date().toISOString();
-  } catch {
-    state.settings.travelRateToTwd = fallbackRatesToTwd[code] || 1;
-    state.settings.travelRateUpdatedAt = new Date().toISOString();
-  }
-  persistSettings();
-  updateToolsUI();
+  const fallback = normalized.match(/\d+(?:\.\d+)?/);
+  return fallback ? Number(fallback[0]) : null;
 }
 
-function renderConverter() {
-  if (!els.converterList || !els.converterPad) return;
-  const base = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
-  const amount = converterAmount();
-  const codes = converterCodes();
-
-  els.converterList.innerHTML = codes.map((code) => {
-    const currency = findCurrency(code);
-    const isBase = code === base;
-    const displayValue = isBase
-      ? state.settings.converterInput || "0"
-      : formatCurrencyValue(convertForConverter(amount, code), code);
-    return `
-      <button class="converter-row${isBase ? " active" : ""}" data-converter-code="${code}" type="button">
-        <span class="converter-flag">${currencyFlagMarkup(currency)}</span>
-        <span class="converter-meta">
-          <strong>${escapeHtml(currency.name)}</strong>
-          <small>${currency.code}</small>
-        </span>
-        <span class="converter-value">${escapeHtml(displayValue)}</span>
-      </button>
-    `;
-  }).join("");
-
-  els.converterPad.innerHTML = [
-    ["1", "2", "3"],
-    ["4", "5", "6"],
-    ["7", "8", "9"],
-    ["C", ".", "0", "⌫"]
-  ].map((row) => `
-    <div class="converter-pad-row">
-      ${row.map((key) => `<button class="${key === "C" ? "clear-key" : key === "⌫" ? "delete-key" : ""}" data-converter-key="${key}" type="button">${key}</button>`).join("")}
-    </div>
-  `).join("");
-
-  if (els.converterStatus) {
-    const stamp = state.settings.converterRateUpdatedAt
-      ? `更新於 ${formatShortDateTime(state.settings.converterRateUpdatedAt)}`
-      : "可離線使用近似匯率";
-    els.converterStatus.textContent = `${stamp} · 基準 ${base}`;
-  }
+function cleanVoiceNote(text) {
+  return text
+    .replace(/(?:NT\$|NTD|TWD|台幣|\$)?\s*\d+(?:[，,]\d{3})*(?:\.\d+)?\s*(?:元|塊|圓)?/gi, "")
+    .replace(/(?:支出|收入|記一筆|幫我記|記帳|花了|收到|入帳)/g, "")
+    .trim();
 }
 
-function converterCodes() {
-  const raw = Array.isArray(state.settings.converterCurrencies)
-    ? state.settings.converterCurrencies
-    : String(state.settings.converterCurrencies || "TWD,USD,JPY,EUR,CNY,HKD").split(",");
-  const base = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
-  const cleaned = [...new Set(raw.map(normalizeCurrencyCode).filter(Boolean))];
-  if (!cleaned.includes(base)) cleaned.unshift(base);
-  const valid = cleaned.filter((code) => travelCurrencies.some((currency) => currency.code === code));
-  return valid.length >= 2 ? valid : ["TWD", "USD", "JPY", "EUR", "CNY", "HKD"];
-}
-
-function persistConverterCodes(codes) {
-  state.settings.converterCurrencies = codes.filter((code, index, list) => list.indexOf(code) === index);
-  persistSettings();
-}
-
-function converterAmount() {
-  const value = Number(String(state.settings.converterInput || "1").replace(/,/g, ""));
-  return Number.isFinite(value) ? value : 0;
-}
-
-function convertForConverter(amount, code) {
-  const base = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
-  if (code === base) return amount;
-  const liveRate = state.settings.converterRatesBase === base
-    ? Number(state.settings.converterRates?.[code])
-    : 0;
-  if (Number.isFinite(liveRate) && liveRate > 0) return amount * liveRate;
-  return convertCurrency(amount, base, code);
-}
-
-function switchConverterBase(code) {
-  const nextBase = normalizeCurrencyCode(code);
-  const currentBase = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
-  if (!nextBase || nextBase === currentBase) return;
-  const converted = convertForConverter(converterAmount(), nextBase);
-  state.settings.converterBaseCurrency = nextBase;
-  state.settings.converterInput = formatPlainNumber(converted || 1);
-  persistSettings();
-  renderConverter();
-  fetchConverterRates(nextBase);
-}
-
-function handleConverterKey(key) {
-  let value = String(state.settings.converterInput || "");
-  if (key === "C") value = "";
-  else if (key === "⌫") value = value.slice(0, -1);
-  else if (key === ".") value = value.includes(".") ? value : `${value || "0"}.`;
-  else if (/^\d$/.test(key)) {
-    if (value === "0") value = key;
-    else if (value.length < 12) value += key;
-  }
-  state.settings.converterInput = value || "0";
-  persistSettings();
-  renderConverter();
-}
-
-async function fetchConverterRates(base = state.settings.converterBaseCurrency || "TWD") {
-  const normalizedBase = normalizeCurrencyCode(base);
-  if (!normalizedBase) return;
-  if (els.converterStatus) els.converterStatus.textContent = "匯率更新中...";
-  try {
-    const response = await fetch(`https://open.er-api.com/v6/latest/${encodeURIComponent(normalizedBase)}`);
-    if (!response.ok) throw new Error("rate fetch failed");
-    const data = await response.json();
-    const rates = Object.fromEntries(travelCurrencies.map((currency) => [currency.code, Number(data.rates?.[currency.code]) || 0]));
-    rates[normalizedBase] = 1;
-    state.settings.converterRatesBase = normalizedBase;
-    state.settings.converterRates = rates;
-    state.settings.converterRateUpdatedAt = new Date().toISOString();
-  } catch {
-    state.settings.converterRatesBase = normalizedBase;
-    state.settings.converterRates = Object.fromEntries(
-      travelCurrencies.map((currency) => [currency.code, convertCurrency(1, normalizedBase, currency.code)])
-    );
-    state.settings.converterRateUpdatedAt = new Date().toISOString();
-  }
-  persistSettings();
-  renderConverter();
-}
-
-function openCurrencyManager() {
-  renderCurrencyManager();
-  els.currencyDialog?.showModal();
-}
-
-function renderCurrencyManager() {
-  const codes = converterCodes();
-  const base = normalizeCurrencyCode(state.settings.converterBaseCurrency || "TWD");
-  if (els.selectedCurrencyList) {
-    els.selectedCurrencyList.innerHTML = codes.map((code, index) => currencyManagerRow(findCurrency(code), {
-      selected: true,
-      base: code === base,
-      first: index === 0,
-      last: index === codes.length - 1,
-      removable: code !== base && codes.length > 2
-    })).join("");
-  }
-  if (els.availableCurrencyList) {
-    const available = travelCurrencies.filter((currency) => !codes.includes(currency.code));
-    els.availableCurrencyList.innerHTML = available.length
-      ? available.map((currency) => currencyManagerRow(currency, { selected: false })).join("")
-      : `<div class="empty-manager">所有幣別都已加入</div>`;
-  }
-}
-
-function currencyManagerRow(currency, options) {
-  if (!currency) return "";
-  const selectedControls = options.selected
-    ? `
-      <span class="manager-controls">
-        <button data-currency-action="up" data-currency-code="${currency.code}" type="button" ${options.first ? "disabled" : ""}>↑</button>
-        <button data-currency-action="down" data-currency-code="${currency.code}" type="button" ${options.last ? "disabled" : ""}>↓</button>
-        <button data-currency-action="remove" data-currency-code="${currency.code}" type="button" ${options.removable ? "" : "disabled"}>−</button>
-      </span>
-    `
-    : `<button class="add-currency" data-currency-add="${currency.code}" type="button">＋</button>`;
-  return `
-    <div class="currency-manager-row">
-      <span class="converter-flag">${currencyFlagMarkup(currency)}</span>
-      <span class="converter-meta">
-        <strong>${escapeHtml(currency.name)}${options.base ? " <em>基準</em>" : ""}</strong>
-        <small>${currency.code}</small>
-      </span>
-      ${selectedControls}
-    </div>
-  `;
-}
-
-function updateConverterCurrencyOrder(action, code) {
-  const codes = converterCodes();
-  const index = codes.indexOf(code);
-  if (index < 0) return;
-  if (action === "up" && index > 0) {
-    [codes[index - 1], codes[index]] = [codes[index], codes[index - 1]];
-  } else if (action === "down" && index < codes.length - 1) {
-    [codes[index + 1], codes[index]] = [codes[index], codes[index + 1]];
-  } else if (action === "remove" && code !== state.settings.converterBaseCurrency && codes.length > 2) {
-    codes.splice(index, 1);
-  }
-  persistConverterCodes(codes);
-  renderConverter();
-  renderCurrencyManager();
-}
-
-function addConverterCurrency(code) {
-  const normalized = normalizeCurrencyCode(code);
-  if (!normalized) return;
-  const codes = converterCodes();
-  if (!codes.includes(normalized)) codes.push(normalized);
-  persistConverterCodes(codes);
-  renderConverter();
-  renderCurrencyManager();
-}
-
-function updateReminderUI() {
-  if (!els.reminderStatus) return;
-  if (els.reminderEnabled) els.reminderEnabled.checked = state.settings.reminderEnabled;
-  if (els.reminderTime) els.reminderTime.value = state.settings.reminderTime;
-  const permission = "Notification" in window ? Notification.permission : "unsupported";
-  if (els.requestNotification) {
-    els.requestNotification.hidden = permission === "granted" || permission === "unsupported";
-  }
-  els.reminderStatus.textContent = state.settings.reminderEnabled
-    ? `${state.settings.reminderTime} 提醒${permission === "granted" ? "，通知已允許" : "，尚未允許通知"}`
-    : "提醒已關閉";
-}
-
-async function requestNotificationPermission() {
-  if (!("Notification" in window)) {
-    window.alert("此瀏覽器不支援通知。");
-    return;
-  }
-  await Notification.requestPermission();
-  updateReminderUI();
-}
-
-function startReminderChecker() {
-  if (reminderTimer) clearInterval(reminderTimer);
-  checkReminder();
-  reminderTimer = setInterval(checkReminder, 60_000);
-}
-
-function checkReminder() {
-  if (!state.settings.reminderEnabled) return;
-  const now = new Date();
-  const today = dateStamp();
-  const current = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  if (current < state.settings.reminderTime || state.settings.lastReminderDate === today) return;
-  state.settings.lastReminderDate = today;
-  persistSettings();
-  if ("Notification" in window && Notification.permission === "granted") {
-    new Notification("i 記帳提醒", { body: "今天的收支記一下，之後的你會感謝現在的你。" });
-  }
-}
-
-function updateEntryTravelUI(existing = null) {
-  if (!els.amountLabel || !els.travelEstimate) return;
-  const isExpense = entryType() === "expense";
-  const currency = existing?.currency || (state.settings.travelEnabled && isExpense ? state.settings.travelCurrency : "TWD");
-  const isTravel = isExpense && currency && currency !== "TWD";
-  els.amountLabel.textContent = isTravel ? `金額 (${currency})` : "金額";
-  const amount = Number((els.amountInput.value || "0").replace(/,/g, ""));
-  if (isTravel && Number.isFinite(amount) && amount > 0) {
-    els.travelEstimate.hidden = false;
-    els.travelEstimate.textContent = `約 ${formatCurrency(amount * rateToTwd(currency))}`;
-  } else {
-    els.travelEstimate.hidden = true;
-  }
-}
-
-function travelPayloadForEntry(inputAmount, existing = null) {
-  if (entryType() !== "expense") return null;
-  const currency = existing?.currency && existing.currency !== "TWD"
-    ? existing.currency
-    : state.settings.travelEnabled
-      ? state.settings.travelCurrency
-      : "TWD";
-  if (!currency || currency === "TWD") return null;
-  return {
-    currency,
-    amountTwd: inputAmount * rateToTwd(currency),
-    travelSessionId: existing?.travelSessionId || state.settings.travelSessionId || makeId()
-  };
-}
-
-function findCurrency(code) {
-  return travelCurrencies.find((currency) => currency.code === code) || travelCurrencies[0];
-}
-
-function rateToTwd(code) {
-  if (code === state.settings.travelCurrency && Number(state.settings.travelRateToTwd) > 0) {
-    return Number(state.settings.travelRateToTwd);
-  }
-  return fallbackRatesToTwd[code] || 1;
-}
-
-function convertCurrency(amount, from, to) {
-  return (amount * rateToTwd(from)) / rateToTwd(to);
+function normalizeSpeechText(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[，,。．.、：:\s]/g, "")
+    .replace(/臺/g, "台");
 }
 
 function currentMonthItems() {
@@ -1140,7 +1777,8 @@ function currentMonthItems() {
 
 function categoryTotals(items) {
   return items.reduce((acc, item) => {
-    acc[item.category] = (acc[item.category] || 0) + Number(item.amount || 0);
+    const normalized = normalizeCategory(item.category, item.isIncome ? "income" : "expense");
+    acc[normalized] = (acc[normalized] || 0) + Number(item.amount || 0);
     return acc;
   }, {});
 }
@@ -1181,11 +1819,13 @@ function sum(items) {
 }
 
 function findCategory(id) {
-  return categories.find((category) => category.id === id) || categories.find((category) => category.id === "other");
+  return categories.find((category) => category.id === id || category.name === id) || categories.find((category) => category.id === "other");
 }
 
-function normalizeCategory(value) {
-  return categories.find((category) => category.id === value || category.name === value)?.id || "other";
+function normalizeCategory(value, type = "expense") {
+  const found = categories.find((category) => category.id === value || category.name === value);
+  if (found) return found.id;
+  return type === "income" ? "incomeOther" : "other";
 }
 
 function makeId() {
@@ -1218,63 +1858,137 @@ function formatDateTime(value) {
 }
 
 function formatCurrency(value) {
-  return new Intl.NumberFormat("zh-TW", {
-    style: "currency",
-    currency: "TWD",
+  return `NT$${new Intl.NumberFormat("zh-TW", {
     maximumFractionDigits: 0
-  }).format(value || 0);
+  }).format(value || 0)}`;
 }
 
-function formatForeign(value, code) {
-  const noDecimal = ["JPY", "KRW", "VND", "IDR", "TWD"];
-  return new Intl.NumberFormat("zh-TW", {
-    maximumFractionDigits: noDecimal.includes(code) ? 0 : 2,
+function formatTwdRate(value) {
+  const amount = Number(value) || 0;
+  return `NT$${new Intl.NumberFormat("zh-TW", {
+    minimumFractionDigits: amount < 1 ? 3 : 0,
+    maximumFractionDigits: amount < 1 ? 4 : 2
+  }).format(amount)}`;
+}
+
+function compactCurrency(value) {
+  return `NT$${new Intl.NumberFormat("zh-TW", {
+    notation: "compact",
+    maximumFractionDigits: 1
+  }).format(value || 0)}`;
+}
+
+function formatForeignAmount(code, value) {
+  const currency = currencyInfoFor(code);
+  const digits = ["JPY", "KRW", "VND", "IDR"].includes(currency.code) ? 0 : 2;
+  return `${currency.symbol}${new Intl.NumberFormat("zh-TW", {
+    maximumFractionDigits: digits,
     minimumFractionDigits: 0
-  }).format(value || 0);
+  }).format(value || 0)}`;
 }
 
-function formatCurrencyValue(value, code) {
-  const currency = findCurrency(code);
-  return `${currency.symbol}${formatForeign(value, code)}`;
+function travelAmountCopy(item) {
+  if (!item.currency || !item.originalAmount) return "";
+  return `${formatForeignAmount(item.currency, item.originalAmount)} ≈ ${formatCurrency(item.amount)}`;
 }
 
-function formatRateValue(value) {
-  const numeric = Number(value || 0);
-  return new Intl.NumberFormat("zh-TW", {
-    maximumFractionDigits: numeric > 0 && numeric < 1 ? 4 : 2,
-    minimumFractionDigits: 0
-  }).format(numeric);
+function currencyInfoFor(code) {
+  return travelCurrencies.find((currency) => currency.code === code) || travelCurrencies[0];
 }
 
-function formatPlainNumber(value) {
-  const numeric = Number(value || 0);
-  if (!Number.isFinite(numeric) || numeric <= 0) return "1";
-  if (Number.isInteger(numeric)) return String(numeric);
-  return numeric.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+function currencyLabelText(currency) {
+  return `${currency.flag} ${currency.code} ${currency.name}`;
 }
 
-function formatShortDateTime(value) {
+function currencyIconMarkup(currency, className = "currency-icon") {
+  if (currency.code === "TWD") {
+    return `
+      <span class="${className} twd-flag" aria-hidden="true">
+        <span class="twd-canton"><span class="twd-sun"></span></span>
+      </span>
+    `;
+  }
+  return `<span class="${className}" aria-hidden="true">${escapeHtml(currency.flag)}</span>`;
+}
+
+function iconMarkup(option) {
+  if (option.image) {
+    return `<img src="${escapeAttr(option.image)}" alt="" width="40" height="40">`;
+  }
+  return `<span>${escapeHtml(option.symbol || "i")}</span>`;
+}
+
+function selectedConverterCodes() {
+  const raw = Array.isArray(state.settings.converterCurrencies)
+    ? state.settings.converterCurrencies
+    : String(state.settings.converterCurrencies || "").split(",");
+  let codes = uniqueCodes(raw.length ? raw : converterDefaultCodes).filter(Boolean);
+  if (codes.length < 2) codes = uniqueCodes(converterDefaultCodes);
+  if (!codes.includes(state.settings.converterBase)) {
+    state.settings.converterBase = codes[0] || "TWD";
+  }
+  state.settings.converterCurrencies = codes;
+  return codes;
+}
+
+function uniqueCodes(codes) {
+  return Array.from(new Set(codes.map((code) => currencyInfoFor(code).code)));
+}
+
+function timeShort(date) {
   return new Intl.DateTimeFormat("zh-TW", {
-    month: "numeric",
-    day: "numeric",
     hour: "2-digit",
     minute: "2-digit"
-  }).format(new Date(value));
+  }).format(date);
 }
 
-function currencyFlagMarkup(currency) {
-  if (currency.code === "TWD") {
-    return `<span class="taiwan-flag" aria-label="台灣國旗"><span></span></span>`;
-  }
-  return `<span class="emoji-flag">${currency.flag}</span>`;
+function roundMoney(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
 }
 
-function formatEntryAmount(item) {
-  const prefix = item.isIncome ? "+" : "";
-  if (!item.isIncome && item.currency && item.currency !== "TWD" && Number(item.originalAmount) > 0) {
-    return `${prefix}${formatCurrency(item.amount)}<small>${escapeHtml(item.currency)} ${formatForeign(item.originalAmount, item.currency)}</small>`;
-  }
-  return `${prefix}${formatCurrency(item.amount)}`;
+function formatConverterInput(code, value) {
+  const digits = ["JPY", "KRW", "VND", "IDR"].includes(currencyInfoFor(code).code) ? 0 : 2;
+  return new Intl.NumberFormat("zh-TW", {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: 0
+  }).format(Number(value) || 0);
+}
+
+function formatAmountForDisplay(value) {
+  const [integer, decimal] = String(value).split(".");
+  const formatted = new Intl.NumberFormat("zh-TW").format(Number(integer || 0));
+  return decimal !== undefined ? `${formatted}.${decimal}` : formatted;
+}
+
+function trimAmount(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "";
+  return Number.isInteger(number) ? String(number) : String(number);
+}
+
+function normalizeAmountText(value) {
+  let next = value.replace(/[^\d.]/g, "");
+  const parts = next.split(".");
+  if (parts.length > 2) next = `${parts[0]}.${parts.slice(1).join("")}`;
+  next = next.replace(/^0+(?=\d)/, "");
+  if (next.startsWith(".")) next = `0${next}`;
+  const [integer, decimal] = next.split(".");
+  return decimal !== undefined ? `${integer}.${decimal.slice(0, 2)}` : integer;
+}
+
+function normalizeConverterText(value) {
+  let next = String(value).replace(/[^\d.]/g, "");
+  const parts = next.split(".");
+  if (parts.length > 2) next = `${parts[0]}.${parts.slice(1).join("")}`;
+  next = next.replace(/^0+(?=\d)/, "");
+  if (next.startsWith(".")) next = `0${next}`;
+  const [integer, decimal] = next.split(".");
+  const whole = integer.slice(0, 12);
+  return decimal !== undefined ? `${whole}.${decimal.slice(0, 4)}` : whole;
+}
+
+function cssEscape(value) {
+  return window.CSS?.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&");
 }
 
 function toLocalInputValue(date) {
@@ -1287,11 +2001,11 @@ function hexToSoft(hex) {
   const r = parseInt(value.slice(0, 2), 16);
   const g = parseInt(value.slice(2, 4), 16);
   const b = parseInt(value.slice(4, 6), 16);
-  return `rgb(${r} ${g} ${b} / 14%)`;
+  return `rgb(${r} ${g} ${b} / 15%)`;
 }
 
 function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (char) => ({
+  return String(value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -1300,47 +2014,8 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function normalizeTheme(theme) {
-  return backgroundStyles.some((style) => style.id === theme) ? theme : "pink";
-}
-
-function normalizeAppIcon(icon) {
-  return appIconOptions.some((option) => option.id === icon) ? icon : "default";
-}
-
-function normalizeCurrencyCode(code) {
-  const normalized = String(code || "").trim().toUpperCase();
-  return travelCurrencies.some((currency) => currency.code === normalized) ? normalized : "";
-}
-
-function loadSettings() {
-  const defaults = {
-    theme: "pink",
-    appIcon: "default",
-    travelEnabled: false,
-    travelCurrency: "JPY",
-    travelRateToTwd: fallbackRatesToTwd.JPY,
-    travelRateUpdatedAt: "",
-    travelSessionId: "",
-    converterInput: "1",
-    converterBaseCurrency: "TWD",
-    converterCurrencies: ["TWD", "USD", "JPY", "EUR", "CNY", "HKD"],
-    converterRatesBase: "",
-    converterRates: {},
-    converterRateUpdatedAt: "",
-    reminderEnabled: false,
-    reminderTime: "21:00",
-    lastReminderDate: ""
-  };
-  try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
-  } catch {
-    return defaults;
-  }
-}
-
-function persistSettings() {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, "&#096;");
 }
 
 function loadExpenses() {
@@ -1348,56 +2023,152 @@ function loadExpenses() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.map(normalizeStoredExpense) : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeExpenseRecord) : [];
   } catch {
     return [];
   }
 }
 
-function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.expenses));
+function loadSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    return normalizeSettings(parsed);
+  } catch {
+    return normalizeSettings({});
+  }
 }
 
-function replaceExpenses(expenses) {
-  state.expenses = expenses.map(normalizeStoredExpense).sort((a, b) => new Date(b.date) - new Date(a.date));
-  persist();
-  render();
-}
-
-function normalizeStoredExpense(item) {
-  const normalized = {
-    id: item.id || makeId(),
-    amount: Number(item.amount || 0),
-    category: normalizeCategory(item.category),
-    note: String(item.note || ""),
-    date: parseExpenseDate(item.date || Date.now()).toISOString(),
-    isIncome: Boolean(item.isIncome),
-    updatedAt: Number(item.updatedAt || 0) || Date.now()
+function normalizeSettings(value) {
+  return {
+    theme: validThemeId(value.theme),
+    icon: validIconId(value.icon),
+    reminderEnabled: Boolean(value.reminderEnabled),
+    reminderTime: /^\d{2}:\d{2}$/.test(value.reminderTime || "") ? value.reminderTime : "21:00",
+    travelModeEnabled: Boolean(value.travelModeEnabled),
+    travelCurrency: currencyInfoFor(value.travelCurrency || "JPY").code,
+    travelSessionId: String(value.travelSessionId || ""),
+    travelStartedAt: String(value.travelStartedAt || ""),
+    converterBase: currencyInfoFor(value.converterBase || "TWD").code,
+    converterAmount: normalizeConverterText(String(value.converterAmount || "1000")),
+    converterCurrencies: uniqueCodes(Array.isArray(value.converterCurrencies)
+      ? value.converterCurrencies
+      : String(value.converterCurrencies || converterDefaultCodes.join(",")).split(",")),
+    cloudSyncLastAt: String(value.cloudSyncLastAt || "")
   };
-  if (item.currency) normalized.currency = String(item.currency);
-  if (Number.isFinite(Number(item.originalAmount))) normalized.originalAmount = Number(item.originalAmount);
-  if (item.travelSessionId) normalized.travelSessionId = String(item.travelSessionId);
+}
+
+function validThemeId(value) {
+  return themeOptions.some((option) => option.id === value) ? value : "pink";
+}
+
+function validIconId(value) {
+  return iconOptions.some((option) => option.id === value) ? value : "cat";
+}
+
+function loadTrips() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TRIPS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((trip) => trip && trip.id) : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadRateCache() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RATE_CACHE_KEY) || "{}");
+    return {
+      ...Object.fromEntries(Object.entries(fallbackTwdRates).map(([code, rate]) => [code, { rate, updatedAt: "", source: "fallback" }])),
+      ...parsed
+    };
+  } catch {
+    return Object.fromEntries(Object.entries(fallbackTwdRates).map(([code, rate]) => [code, { rate, updatedAt: "", source: "fallback" }]));
+  }
+}
+
+function normalizeExpenseRecord(item) {
+  const isIncome = Boolean(item.isIncome);
+  const normalized = {
+    ...item,
+    amount: Number(item.amount),
+    category: normalizeCategory(item.category, isIncome ? "income" : "expense"),
+    isIncome,
+    updatedAt: String(item.updatedAt || item.date || new Date().toISOString())
+  };
+  if (item.currency && item.currency !== "TWD") {
+    normalized.currency = currencyInfoFor(item.currency).code;
+    normalized.originalAmount = Number(item.originalAmount || item.amount);
+    normalized.exchangeRate = Number(item.exchangeRate || fallbackTwdRates[normalized.currency] || 1);
+  }
   return normalized;
 }
 
-function exportJson() {
-  const payload = {
+function persist(options = {}) {
+  const { sync = true } = options;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.expenses));
+  if (sync) queueCloudSync("expenses");
+}
+
+function saveSettings(options = {}) {
+  const { sync = true } = options;
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+  if (sync) queueCloudSync("settings");
+}
+
+function saveTrips(options = {}) {
+  const { sync = true } = options;
+  localStorage.setItem(TRIPS_KEY, JSON.stringify(state.trips));
+  if (sync) queueCloudSync("trips");
+}
+
+function saveRateCache() {
+  localStorage.setItem(RATE_CACHE_KEY, JSON.stringify(state.rateCache));
+}
+
+function createBackupPayload() {
+  return {
     app: "i 記帳 PWA",
-    version: 1,
+    version: 7,
     exportedAt: new Date().toISOString(),
-    expenses: state.expenses
+    expenses: state.expenses,
+    settings: exportableSettings(),
+    trips: state.trips
   };
-  download(`i-expense-backup-${dateStamp()}.json`, JSON.stringify(payload, null, 2), "application/json");
+}
+
+function exportableSettings() {
+  const settings = { ...state.settings };
+  delete settings.cloudSyncToken;
+  delete settings.cloudSyncUrl;
+  delete settings.cloudSyncEnabled;
+  return settings;
+}
+
+function exportJson() {
+  download(`i-expense-backup-${dateStamp()}.json`, JSON.stringify(createBackupPayload(), null, 2), "application/json");
+}
+
+async function copyJson() {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(createBackupPayload(), null, 2));
+    els.dataCount.textContent = "備份已複製";
+    window.setTimeout(updateDataManagement, 1600);
+  } catch {
+    window.alert("複製失敗，請改用匯出備份。");
+  }
 }
 
 function exportCsv() {
   const rows = [
-    ["date", "type", "category", "amount", "note"],
+    ["date", "type", "category", "amount_twd", "currency", "original_amount", "exchange_rate", "note"],
     ...state.expenses.map((item) => [
       item.date,
       item.isIncome ? "income" : "expense",
       findCategory(item.category).name,
       item.amount,
+      item.currency || "TWD",
+      item.originalAmount || item.amount,
+      item.exchangeRate || 1,
       item.note || ""
     ])
   ];
@@ -1411,7 +2182,9 @@ function importJson(event) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      importJsonText(String(reader.result));
+      const parsed = JSON.parse(String(reader.result));
+      mergeBackupIntoState(parsed);
+      render();
     } catch {
       window.alert("匯入失敗，檔案格式不正確。");
     } finally {
@@ -1421,249 +2194,75 @@ function importJson(event) {
   reader.readAsText(file);
 }
 
-async function importJsonFromClipboard() {
-  try {
-    const text = await navigator.clipboard.readText();
-    importJsonText(text);
-  } catch {
-    window.alert("無法讀取剪貼簿，請改用 JSON 檔案匯入。");
-  }
-}
-
-function importJsonText(text) {
-  const parsed = JSON.parse(text);
-  const imported = Array.isArray(parsed) ? parsed : parsed.expenses;
+function mergeBackupIntoState(parsed, options = {}) {
+  const { sync = true } = options;
+  const imported = Array.isArray(parsed) ? parsed : parsed?.expenses;
   if (!Array.isArray(imported)) throw new Error("Invalid backup");
   const normalized = imported
     .filter((item) => item && Number(item.amount) > 0 && item.date)
-    .map((item) => ({
+    .map((item) => normalizeExpenseRecord({
+      ...item,
       id: item.id || makeId(),
       amount: Number(item.amount),
-      category: normalizeCategory(item.category),
+      category: item.category,
       note: String(item.note || ""),
-      date: parseExpenseDate(item.date).toISOString(),
-      isIncome: Boolean(item.isIncome),
-      currency: item.currency ? String(item.currency) : undefined,
-      originalAmount: Number.isFinite(Number(item.originalAmount)) ? Number(item.originalAmount) : undefined,
-      travelSessionId: item.travelSessionId ? String(item.travelSessionId) : undefined,
-      updatedAt: Number(item.updatedAt || 0) || Date.now()
+      date: new Date(item.date).toISOString(),
+      isIncome: Boolean(item.isIncome)
     }));
   state.expenses = mergeExpenses(state.expenses, normalized);
-  persist();
-  syncAllToCloud();
-  render();
+
+  if (!Array.isArray(parsed) && parsed.settings) {
+    const importedSettings = { ...parsed.settings };
+    delete importedSettings.cloudSyncToken;
+    delete importedSettings.cloudSyncUrl;
+    delete importedSettings.cloudSyncEnabled;
+    state.settings = normalizeSettings({ ...state.settings, ...importedSettings });
+    saveSettings({ sync });
+    applySettings();
+    populateCurrencySelects();
+  }
+
+  const importedTrips = !Array.isArray(parsed) && Array.isArray(parsed.trips) ? parsed.trips : [];
+  if (importedTrips.length) {
+    state.trips = mergeTrips(state.trips, importedTrips);
+    saveTrips({ sync });
+  }
+
+  persist({ sync });
+  return { expenses: normalized.length, trips: importedTrips.length };
 }
 
 function mergeExpenses(current, imported) {
-  const byId = new Map(current.map((item) => [item.id, normalizeStoredExpense(item)]));
+  const byId = new Map(current.map((item) => [item.id, item]));
   imported.forEach((item) => {
-    const normalized = normalizeStoredExpense(item);
-    const existing = byId.get(normalized.id);
-    if (!existing || normalized.updatedAt >= existing.updatedAt) {
-      byId.set(normalized.id, normalized);
+    const existing = byId.get(item.id);
+    if (!existing || new Date(item.updatedAt || item.date) >= new Date(existing.updatedAt || existing.date)) {
+      byId.set(item.id, item);
     }
   });
   return Array.from(byId.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
-function parseExpenseDate(value) {
-  if (typeof value === "number") {
-    if (value > 1_000_000_000_000) return safeDate(value);
-    if (value > 1_000_000_000) return safeDate(value * 1000);
-    return safeDate((value * 1000) + APPLE_REFERENCE_OFFSET_MS);
-  }
-  return safeDate(value);
-}
-
-function safeDate(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? new Date() : date;
+function mergeTrips(current, imported) {
+  const byId = new Map(current.map((item) => [item.id, item]));
+  imported
+    .filter((item) => item && item.id)
+    .forEach((item) => byId.set(item.id, item));
+  return Array.from(byId.values()).sort((a, b) => new Date(b.endedAt || b.startedAt || 0) - new Date(a.endedAt || a.startedAt || 0));
 }
 
 function clearData() {
   const ok = window.confirm("清除所有記帳資料？");
   if (!ok) return;
   state.expenses = [];
+  state.trips = [];
+  state.settings.travelModeEnabled = false;
+  state.settings.travelSessionId = "";
+  state.settings.travelStartedAt = "";
   persist();
-  clearCloudExpenses();
+  saveSettings();
+  saveTrips();
   render();
-}
-
-async function initFirebaseSync() {
-  if (!firebaseIsConfigured) {
-    state.syncStatus = "請先填寫 firebase-config.js";
-    updateSyncUI();
-    return;
-  }
-
-  try {
-    state.syncStatus = "載入 Firebase...";
-    updateSyncUI();
-
-    const [appModule, authModule, firestoreModule] = await Promise.all([
-      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`),
-      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth.js`),
-      import(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`)
-    ]);
-
-    const app = appModule.initializeApp(firebaseConfig);
-    cloud.auth = authModule.getAuth(app);
-    cloud.db = firestoreModule.getFirestore(app);
-    cloud.provider = new authModule.GoogleAuthProvider();
-    cloud.modules = { authModule, firestoreModule };
-    cloud.ready = true;
-
-    await authModule.getRedirectResult(cloud.auth).catch(() => null);
-
-    authModule.onAuthStateChanged(cloud.auth, async (user) => {
-      if (!user) {
-        state.user = null;
-        state.authLabel = "本機";
-        state.syncStatus = "未登入，資料只存在此裝置";
-        if (cloud.unsubscribe) cloud.unsubscribe();
-        cloud.unsubscribe = null;
-        updateSyncUI();
-        return;
-      }
-
-      state.user = user;
-      state.authLabel = user.displayName || user.email || "已登入";
-      state.syncStatus = "合併雲端資料...";
-      updateSyncUI();
-      await mergeRemoteAndLocal();
-      subscribeRemoteExpenses();
-      state.syncStatus = "雲端同步中";
-      updateSyncUI();
-    });
-  } catch (error) {
-    state.syncStatus = `Firebase 初始化失敗：${error.message}`;
-    updateSyncUI();
-  }
-}
-
-async function signInWithGoogle() {
-  if (!cloud.ready) {
-    window.alert("Firebase 尚未設定。請先在 firebase-config.js 填入專案設定。");
-    return;
-  }
-  try {
-    state.syncStatus = "開啟 Google 登入...";
-    updateSyncUI();
-    await cloud.modules.authModule.signInWithPopup(cloud.auth, cloud.provider);
-  } catch {
-    await cloud.modules.authModule.signInWithRedirect(cloud.auth, cloud.provider);
-  }
-}
-
-async function signOutFromCloud() {
-  if (!cloud.ready) return;
-  await cloud.modules.authModule.signOut(cloud.auth);
-}
-
-async function mergeRemoteAndLocal() {
-  if (!state.user) return;
-  const remote = await readRemoteExpenses();
-  const merged = mergeExpenses(state.expenses, remote);
-  replaceExpenses(merged);
-  await writeAllRemote(merged);
-}
-
-async function readRemoteExpenses() {
-  const { collection, getDocs } = cloud.modules.firestoreModule;
-  const snapshot = await getDocs(collection(cloud.db, "users", state.user.uid, "expenses"));
-  return snapshot.docs.map((docSnap) => normalizeStoredExpense({ id: docSnap.id, ...docSnap.data() }));
-}
-
-function subscribeRemoteExpenses() {
-  if (!state.user) return;
-  if (cloud.unsubscribe) cloud.unsubscribe();
-  const { collection, onSnapshot } = cloud.modules.firestoreModule;
-  cloud.unsubscribe = onSnapshot(
-    collection(cloud.db, "users", state.user.uid, "expenses"),
-    (snapshot) => {
-      if (cloud.syncing) return;
-      replaceExpenses(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
-      state.syncStatus = `已同步 ${state.expenses.length} 筆`;
-      updateSyncUI();
-    },
-    (error) => {
-      state.syncStatus = `同步失敗：${error.message}`;
-      updateSyncUI();
-    }
-  );
-}
-
-async function syncAllToCloud() {
-  if (!state.user) return;
-  state.syncStatus = "上傳本機資料...";
-  updateSyncUI();
-  await writeAllRemote(state.expenses);
-  state.syncStatus = `已同步 ${state.expenses.length} 筆`;
-  updateSyncUI();
-}
-
-async function writeAllRemote(expenses) {
-  if (!state.user) return;
-  const { writeBatch, doc } = cloud.modules.firestoreModule;
-  const batch = writeBatch(cloud.db);
-  expenses.map(normalizeStoredExpense).forEach((expense) => {
-    batch.set(doc(cloud.db, "users", state.user.uid, "expenses", expense.id), expense);
-  });
-  cloud.syncing = true;
-  try {
-    await batch.commit();
-  } finally {
-    cloud.syncing = false;
-  }
-}
-
-async function upsertCloudExpense(expense) {
-  if (!state.user) return;
-  const { doc, setDoc } = cloud.modules.firestoreModule;
-  cloud.syncing = true;
-  try {
-    await setDoc(doc(cloud.db, "users", state.user.uid, "expenses", expense.id), normalizeStoredExpense(expense));
-    state.syncStatus = "已同步";
-  } catch (error) {
-    state.syncStatus = `同步失敗：${error.message}`;
-  } finally {
-    cloud.syncing = false;
-    updateSyncUI();
-  }
-}
-
-async function deleteCloudExpense(id) {
-  if (!state.user) return;
-  const { doc, deleteDoc } = cloud.modules.firestoreModule;
-  await deleteDoc(doc(cloud.db, "users", state.user.uid, "expenses", id)).catch((error) => {
-    state.syncStatus = `刪除雲端資料失敗：${error.message}`;
-    updateSyncUI();
-  });
-}
-
-async function clearCloudExpenses() {
-  if (!state.user) return;
-  const remote = await readRemoteExpenses();
-  const { writeBatch, doc } = cloud.modules.firestoreModule;
-  const batch = writeBatch(cloud.db);
-  remote.forEach((expense) => {
-    batch.delete(doc(cloud.db, "users", state.user.uid, "expenses", expense.id));
-  });
-  await batch.commit().catch((error) => {
-    state.syncStatus = `清除雲端資料失敗：${error.message}`;
-    updateSyncUI();
-  });
-}
-
-function updateSyncUI() {
-  if (els.authStatus) els.authStatus.textContent = state.authLabel;
-  if (els.syncStatus) els.syncStatus.textContent = state.syncStatus;
-  if (els.signInButton) {
-    els.signInButton.disabled = !firebaseIsConfigured || Boolean(state.user);
-    els.signInButton.hidden = Boolean(state.user);
-  }
-  if (els.signOutButton) els.signOutButton.hidden = !state.user;
-  if (els.syncNowButton) els.syncNowButton.disabled = !state.user;
 }
 
 function download(filename, content, type) {

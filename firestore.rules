@@ -3,13 +3,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 每個使用者只能讀寫自己 uid 底下的 expenses
-    match /users/{userId}/expenses/{expenseId} {
+    // 每個使用者只能讀寫自己 uid 底下的所有子集合
+    // （expenses / backups / 未來新增的任何路徑）
+    match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null
                          && request.auth.uid == userId;
     }
 
-    // 其他路徑一律拒絕
+    // 其他根路徑一律拒絕
     match /{document=**} {
       allow read, write: if false;
     }
