@@ -1979,6 +1979,270 @@ dialog::backdrop {
   cursor: pointer;
 }
 
+/* ====================================================================
+   SETTINGS 頁面 — 統一字體、按鈕、欄位的設計系統
+   所有 #settingsView 內元素遵守同一組 token：
+     - 卡片內距 20px / 圓角 22px / 卡片間距 14px
+     - h3 16/700 · 狀態副文 13/500/muted
+     - 所有 action button: 44px 高 · 999px pill · 14/700 · padding 0 18px
+     - 所有 input / select: 44px 高 · 12px 圓角 · 14/600
+   ==================================================================== */
+
+#settingsView .settings-stack {
+  display: grid;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+#settingsView .settings-title h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+}
+
+#settingsView .settings-card {
+  padding: 20px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+#settingsView .settings-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 36px;
+  margin-bottom: 16px;
+}
+
+#settingsView .settings-card-head > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#settingsView .settings-card h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+#settingsView .settings-card-head > div > span,
+#settingsView .settings-note {
+  display: block;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+#settingsView .settings-note {
+  margin-top: 12px;
+}
+
+/* ---- 所有可點擊 action button 共用同一規格 ---- */
+#settingsView .settings-action,
+#settingsView .mini-button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+#settingsView .mini-button {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+
+/* ---- 表單欄位（select / input / time）共用同一規格 ---- */
+#settingsView .settings-control-row {
+  min-height: 56px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  gap: 14px;
+}
+
+#settingsView .settings-card-head + .settings-control-row {
+  border-top: 0;
+  padding-top: 4px;
+}
+
+#settingsView .settings-control-row label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+#settingsView .settings-control-row > span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 0;
+}
+
+#settingsView .settings-control-row select,
+#settingsView .settings-control-row input {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+#settingsView .settings-control-row select:focus-visible,
+#settingsView .settings-control-row input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* ---- 按鈕格網（button-grid）內按鈕等高填滿 ---- */
+#settingsView .button-grid {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+#settingsView .button-grid .settings-action {
+  width: 100%;
+}
+
+/* ---- 雲端同步：使用者卡 ---- */
+#settingsView .cloud-user {
+  min-height: 64px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  margin-bottom: 12px;
+}
+
+#settingsView .cloud-user-meta strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+#settingsView .cloud-user-meta span {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#settingsView .cloud-user-chevron,
+#settingsView .settings-collapse-chevron {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+#settingsView .cloud-actions {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+
+#settingsView .cloud-actions > .settings-action {
+  width: min(280px, 100%);
+}
+
+#settingsView .cloud-signout-wrap > .settings-action {
+  width: 100%;
+}
+
+/* ---- 主題色彩 / App 圖示：option-grid 統一卡片尺寸 ---- */
+#settingsView .option-grid {
+  gap: 10px;
+}
+
+#settingsView .option-button {
+  min-height: 88px;
+  border-radius: 18px;
+  padding: 12px 8px;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#settingsView .option-button.selected {
+  font-weight: 700;
+}
+
+#settingsView .swatch,
+#settingsView .icon-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+}
+
+/* ---- 資料管理：折疊頭 + 內部 pill 按鈕一致 ---- */
+#settingsView .settings-collapse-head {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+#settingsView .data-actions {
+  padding-top: 16px;
+  gap: 10px;
+}
+
+#settingsView .settings-action.data-action {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#settingsView .settings-action.data-action span {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+#settingsView .settings-action.data-action strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+#settingsView .settings-action.data-action.danger-action span {
+  color: var(--danger);
+}
+
+/* ---- 通知提醒：時間欄位 ---- */
+#settingsView .reminder-time-row {
+  grid-template-columns: minmax(0, 1fr) 132px;
+}
+
+#settingsView .reminder-time-row input {
+  width: 132px;
+  justify-self: end;
+  text-align: center;
+}
+
+/* ---- 換匯入口：右側按鈕、左側標題對齊一致 ---- */
+#settingsView .settings-card[aria-labelledby="converterEntryTitle"] .settings-card-head {
+  margin-bottom: 0;
+}
+
+#settingsView .settings-card[aria-labelledby="converterEntryTitle"] .settings-note {
+  margin-top: 14px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
