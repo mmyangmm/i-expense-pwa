@@ -10,7 +10,7 @@
     <title>i 記帳</title>
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="./styles.css?v=13">
+    <link rel="stylesheet" href="./styles.css?v=14">
   </head>
   <body>
     <div class="app-shell">
@@ -105,17 +105,20 @@
                   <span id="cloudSyncStatus"></span>
                 </div>
               </div>
-              <div class="cloud-user" id="cloudUserCard" hidden>
+              <div class="cloud-user" id="cloudUserCard" role="button" tabindex="0" aria-expanded="false" aria-controls="signOutWrap" aria-label="顯示登出選項" hidden>
                 <span class="cloud-avatar" id="cloudUserAvatar" aria-hidden="true"></span>
-                <div>
+                <div class="cloud-user-meta">
                   <strong id="cloudUserName"></strong>
                   <span id="cloudUserEmail"></span>
                 </div>
+                <span class="cloud-user-chevron" aria-hidden="true">▾</span>
+              </div>
+              <div class="cloud-signout-wrap" id="signOutWrap" hidden>
+                <button class="settings-action danger-action" id="googleSignOut" type="button">登出</button>
               </div>
               <div class="button-grid cloud-actions">
                 <button class="settings-action primary-action" id="googleSignIn" type="button">使用 Google 登入</button>
                 <button class="settings-action" id="syncNow" type="button">立即同步</button>
-                <button class="settings-action" id="googleSignOut" type="button">登出</button>
               </div>
               <p class="settings-note">登入後會透過 Firebase Authentication 與 Firestore 合併並自動同步本機資料。</p>
             </section>
@@ -194,31 +197,32 @@
             </section>
 
             <section class="settings-card" aria-labelledby="dataTitle">
-              <div class="settings-card-head">
+              <div class="settings-card-head settings-collapse-head" id="dataToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="dataList">
                 <div>
                   <h3 id="dataTitle">資料管理</h3>
                   <span id="dataCount"></span>
                 </div>
+                <span class="settings-collapse-chevron" aria-hidden="true">▾</span>
               </div>
-              <div class="settings-list">
-                <button id="exportJson" class="settings-row" type="button">
+              <div class="data-actions" id="dataList" hidden>
+                <button id="exportJson" class="settings-action data-action" type="button">
                   <span>匯出備份</span>
                   <strong>JSON</strong>
                 </button>
-                <button id="copyJson" class="settings-row" type="button">
+                <button id="copyJson" class="settings-action data-action" type="button">
                   <span>複製備份</span>
                   <strong>剪貼簿</strong>
                 </button>
-                <button id="exportCsv" class="settings-row" type="button">
+                <button id="exportCsv" class="settings-action data-action" type="button">
                   <span>匯出表格</span>
                   <strong>CSV</strong>
                 </button>
-                <label class="settings-row file-row">
+                <label class="settings-action data-action file-row">
                   <span>匯入備份</span>
                   <strong>JSON</strong>
                   <input id="importJson" type="file" accept="application/json,.json">
                 </label>
-                <button id="clearData" class="settings-row danger-row" type="button">
+                <button id="clearData" class="settings-action data-action danger-action" type="button">
                   <span>清除資料</span>
                   <strong>全部</strong>
                 </button>
@@ -373,7 +377,7 @@
       </div>
     </template>
 
-    <script src="./firebase-config.js?v=13"></script>
-    <script src="./app.js?v=13" type="module"></script>
+    <script src="./firebase-config.js?v=14"></script>
+    <script src="./app.js?v=14" type="module"></script>
   </body>
 </html>

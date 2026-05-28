@@ -124,7 +124,9 @@ const state = {
   activeEntryCurrency: null,
   converterMessage: "",
   travelMessage: "",
-  cloudSyncMessage: ""
+  cloudSyncMessage: "",
+  signOutRevealed: false,
+  dataMgmtExpanded: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -307,6 +309,25 @@ function bindEvents() {
   els.googleSignIn.addEventListener("click", signInWithGoogle);
   els.googleSignOut.addEventListener("click", signOutGoogle);
   els.syncNow.addEventListener("click", () => performCloudSync("manual", true));
+  const toggleSignOutReveal = () => {
+    state.signOutRevealed = !state.signOutRevealed;
+    renderCloudSyncSettings();
+  };
+  els.cloudUserCard.addEventListener("click", toggleSignOutReveal);
+  els.cloudUserCard.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSignOutReveal(); }
+  });
+  const dataToggle = $("#dataToggle");
+  const dataList = $("#dataList");
+  const toggleDataMgmt = () => {
+    state.dataMgmtExpanded = !state.dataMgmtExpanded;
+    dataList.hidden = !state.dataMgmtExpanded;
+    dataToggle.setAttribute("aria-expanded", state.dataMgmtExpanded ? "true" : "false");
+  };
+  dataToggle.addEventListener("click", toggleDataMgmt);
+  dataToggle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleDataMgmt(); }
+  });
   els.requestNotification.addEventListener("click", requestNotificationPermission);
   els.testNotification.addEventListener("click", () => showReminderNotification(true));
   $("#exportJson").addEventListener("click", exportJson);
@@ -605,7 +626,13 @@ function renderCloudSyncSettings() {
 
   els.googleSignIn.hidden = signedIn;
   els.googleSignIn.disabled = cloudSyncInFlight || firebaseInitializing;
-  els.googleSignOut.hidden = !signedIn;
+  // 登出鍵預設隱藏，點擊使用者卡片才展開（避免誤觸）
+  const signOutWrap = $("#signOutWrap");
+  if (!signedIn) state.signOutRevealed = false;
+  const showSignOut = signedIn && state.signOutRevealed;
+  if (signOutWrap) signOutWrap.hidden = !showSignOut;
+  els.cloudUserCard.setAttribute("aria-expanded", showSignOut ? "true" : "false");
+  els.googleSignOut.hidden = !showSignOut;
   els.googleSignOut.disabled = cloudSyncInFlight;
   els.syncNow.disabled = !configured || !signedIn || cloudSyncInFlight;
 

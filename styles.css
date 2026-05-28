@@ -1736,6 +1736,148 @@ dialog::backdrop {
   }
 }
 
+/* ---- Collapsible reveal: cloud-user → sign out, settings-card-head → list ---- */
+
+.cloud-user {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background 160ms ease;
+}
+
+.cloud-user:hover,
+.cloud-user:focus-visible {
+  background: var(--primary-light);
+  outline: none;
+}
+
+.cloud-user-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.cloud-user-meta strong,
+.cloud-user-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-user-meta span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cloud-user-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 16px;
+  transition: transform 200ms ease;
+}
+
+.cloud-user[aria-expanded="true"] .cloud-user-chevron {
+  transform: rotate(180deg);
+}
+
+.cloud-signout-wrap {
+  margin-bottom: 12px;
+  display: grid;
+  animation: signoutReveal 160ms ease;
+}
+
+@keyframes signoutReveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cloud-actions {
+  grid-template-columns: 1.4fr 1fr;
+}
+
+/* Danger button (red bg/text) — used by logout & clear data */
+.settings-action.danger-action {
+  background: #ffe1e7;
+  color: var(--danger);
+}
+
+.settings-action.danger-action:hover {
+  background: #ffd0da;
+}
+
+/* ---- Collapsible header (data-management) ---- */
+
+.settings-collapse-head {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  width: 100%;
+  border-radius: 12px;
+  transition: background 160ms ease;
+}
+
+.settings-collapse-head:hover,
+.settings-collapse-head:focus-visible {
+  background: var(--primary-light);
+  outline: none;
+}
+
+.settings-collapse-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 16px;
+  transition: transform 200ms ease;
+}
+
+.settings-collapse-head[aria-expanded="true"] .settings-collapse-chevron {
+  transform: rotate(180deg);
+}
+
+/* ---- Data management as pill buttons (vertical stack) ---- */
+
+.data-actions {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  animation: signoutReveal 160ms ease;
+}
+
+.settings-action.data-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  min-height: 48px;
+  text-align: left;
+}
+
+.settings-action.data-action span {
+  font-weight: 900;
+}
+
+.settings-action.data-action strong {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.settings-action.data-action.danger-action span {
+  color: var(--danger);
+}
+
+.settings-action.data-action.file-row {
+  position: relative;
+}
+
+.settings-action.data-action.file-row input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
