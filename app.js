@@ -49,7 +49,7 @@ const categories = [
 ];
 
 const travelCurrencies = [
-  { code: "TWD", name: "新台幣", flag: "NT$", symbol: "NT$" },
+  { code: "TWD", name: "新台幣", flag: "$", symbol: "$" },
   { code: "JPY", name: "日圓", flag: "🇯🇵", symbol: "¥" },
   { code: "USD", name: "美元", flag: "🇺🇸", symbol: "$" },
   { code: "EUR", name: "歐元", flag: "🇪🇺", symbol: "€" },
@@ -126,7 +126,9 @@ const state = {
   travelMessage: "",
   cloudSyncMessage: "",
   signOutRevealed: false,
-  dataMgmtExpanded: false
+  dataMgmtExpanded: false,
+  recentExpanded: false,
+  statsItemsExpanded: false
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -135,7 +137,7 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const els = {
   todayLabel: $("#todayLabel"),
   homeTitle: $("#homeTitle"),
-  goCurrentMonth: $("#goCurrentMonth"),
+  statsTitle: $("#statsTitle"),
   monthExpense: $("#monthExpense"),
   monthIncome: $("#monthIncome"),
   currentExpenseLabel: $("#currentExpenseLabel"),
@@ -235,9 +237,19 @@ function bindEvents() {
     });
   });
 
-  els.goCurrentMonth.addEventListener("click", () => {
-    state.selectedMonth = startOfMonth(new Date());
-    render();
+  $$(".go-current-month").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedMonth = startOfMonth(new Date());
+      state.recentExpanded = false;
+      state.statsItemsExpanded = false;
+      render();
+    });
+  });
+  $$("[data-month]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.recentExpanded = false;
+      state.statsItemsExpanded = false;
+    });
   });
 
   $$(".tab").forEach((button) => {
@@ -327,6 +339,16 @@ function bindEvents() {
   dataToggle.addEventListener("click", toggleDataMgmt);
   dataToggle.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleDataMgmt(); }
+  });
+  const recentToggle = $("#recentExpandToggle");
+  if (recentToggle) recentToggle.addEventListener("click", () => {
+    state.recentExpanded = !state.recentExpanded;
+    renderHome();
+  });
+  const statsToggle = $("#statsExpandToggle");
+  if (statsToggle) statsToggle.addEventListener("click", () => {
+    state.statsItemsExpanded = !state.statsItemsExpanded;
+    renderStats();
   });
   els.requestNotification.addEventListener("click", requestNotificationPermission);
   els.testNotification.addEventListener("click", () => showReminderNotification(true));
@@ -441,7 +463,7 @@ function renderTravelSettings() {
     ? `${currency.code} · ${activeItems.length} 筆`
     : `${state.trips.length} 次旅行`;
   els.travelRateLabel.textContent = currency.code === "TWD"
-    ? "1 TWD = NT$1"
+    ? "1 TWD = $1"
     : `1 ${currency.code} ≈ ${formatTwdRate(rate)}${state.travelMessage ? ` · ${state.travelMessage}` : ""}`;
 }
 
@@ -1171,6 +1193,14 @@ function nextReminderDate(value) {
   return next;
 }
 
+function syncMonthBars() {
+  const label = formatMonth(state.selectedMonth);
+  const isCurrent = sameMonth(state.selectedMonth, new Date());
+  $$("[data-month-label]").forEach((el) => { el.textContent = label; });
+  $$(".go-current-month").forEach((btn) => { btn.hidden = isCurrent; });
+  $$("[data-month='1']").forEach((btn) => { btn.disabled = isCurrent; });
+}
+
 function renderHome() {
   const monthItems = currentMonthItems();
   const expenseItems = monthItems.filter((item) => !item.isIncome);
@@ -1178,11 +1208,8 @@ function renderHome() {
   const expenseTotal = sum(expenseItems);
   const incomeTotal = sum(incomeItems);
   const average = sixMonthAverageExpense();
-  const isCurrent = sameMonth(state.selectedMonth, new Date());
 
-  els.homeTitle.textContent = formatMonth(state.selectedMonth);
-  els.goCurrentMonth.hidden = isCurrent;
-  document.querySelector("[data-month='1']").disabled = isCurrent;
+  syncMonthBars();
   els.monthExpense.textContent = formatCurrency(expenseTotal);
   els.monthIncome.textContent = formatCurrency(incomeTotal);
   els.currentExpenseLabel.textContent = formatCurrency(expenseTotal);
@@ -1218,13 +1245,18 @@ function renderCategoryStrip(expenseItems, expenseTotal) {
 }
 
 function renderTransactions(items) {
+  const expandToggle = $("#recentExpandToggle");
+  const expandLabel = $("#recentExpandLabel");
   if (!items.length) {
     els.transactionList.innerHTML = $("#emptyTemplate").innerHTML;
+    if (expandToggle) expandToggle.hidden = true;
     return;
   }
 
-  els.transactionList.innerHTML = items
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
+  const sorted = [...items].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const visible = state.recentExpanded ? sorted : sorted.slice(0, 10);
+
+  els.transactionList.innerHTML = visible
     .map((item) => {
       const category = findCategory(item.category);
       const travelCopy = travelAmountCopy(item);
@@ -1244,9 +1276,17 @@ function renderTransactions(items) {
   $$(".transaction-row").forEach((row) => {
     row.addEventListener("click", () => openEntryDialog(row.dataset.id));
   });
+
+  if (expandToggle) {
+    const overflow = sorted.length - 10;
+    expandToggle.hidden = sorted.length <= 10;
+    expandToggle.setAttribute("aria-expanded", state.recentExpanded ? "true" : "false");
+    if (expandLabel) expandLabel.textContent = state.recentExpanded ? "收合" : `顯示其餘 ${overflow} 筆`;
+  }
 }
 
 function renderStats() {
+  syncMonthBars();
   els.statsMode.value = state.statsMode;
   const expenseItems = currentMonthItems().filter((item) => !item.isIncome);
   if (state.statsMode === "daily") {
@@ -1263,13 +1303,16 @@ function renderCategoryStats(expenseItems) {
     .filter((category) => category.type === "expense" && totals[category.id] > 0)
     .sort((a, b) => totals[b.id] - totals[a.id]);
 
-  els.statsCount.textContent = rows.length ? `${rows.length} 類` : "";
+  const expandToggle = $("#statsExpandToggle");
+  const expandLabel = $("#statsExpandLabel");
 
   if (!rows.length) {
     els.chartCanvas.removeAttribute("role");
     els.chartCanvas.removeAttribute("aria-label");
     els.chartCanvas.innerHTML = $("#emptyTemplate").innerHTML;
     els.statsList.innerHTML = "";
+    els.statsCount.textContent = "";
+    if (expandToggle) expandToggle.hidden = true;
     return;
   }
 
@@ -1277,15 +1320,37 @@ function renderCategoryStats(expenseItems) {
   els.chartCanvas.setAttribute("aria-label", `本月支出共 ${formatCurrency(total)}，最高分類為 ${rows[0].name}`);
   els.chartCanvas.innerHTML = renderPieChart(rows, totals, total);
 
-  els.statsList.innerHTML = rows.map((category) => `
-    <div class="stats-item">
-      <div>
-        <strong>${category.emoji} ${escapeHtml(category.name)}</strong>
-        <div class="stats-meta">${currentMonthItems().filter((item) => item.category === category.id).length} 筆</div>
-      </div>
-      <strong>${formatCurrency(totals[category.id])}</strong>
-    </div>
-  `).join("");
+  // 改為品項排行（不是分類排名）
+  const sortedItems = [...expenseItems].sort((a, b) => Number(b.amount) - Number(a.amount));
+  els.statsCount.textContent = sortedItems.length ? `${sortedItems.length} 筆` : "";
+  const visible = state.statsItemsExpanded ? sortedItems : sortedItems.slice(0, 5);
+
+  els.statsList.innerHTML = visible.map((item) => {
+    const category = findCategory(item.category);
+    const travelCopy = travelAmountCopy(item);
+    const subline = `${formatDateTime(item.date)} · ${category.name}${travelCopy ? ` · ${travelCopy}` : ""}`;
+    return `
+      <button class="transaction-row" type="button" data-id="${escapeAttr(item.id)}" aria-label="${escapeAttr(`${item.note || category.name} ${formatCurrency(item.amount)}`)}">
+        <span class="row-icon" style="background:${hexToSoft(category.color)}">${category.emoji}</span>
+        <span class="row-main">
+          <strong>${escapeHtml(item.note || category.name)}</strong>
+          <time class="row-subline">${escapeHtml(subline)}</time>
+        </span>
+        <span class="row-amount expense">${formatCurrency(item.amount)}</span>
+      </button>
+    `;
+  }).join("");
+
+  els.statsList.querySelectorAll(".transaction-row").forEach((row) => {
+    row.addEventListener("click", () => openEntryDialog(row.dataset.id));
+  });
+
+  if (expandToggle) {
+    const overflow = sortedItems.length - 5;
+    expandToggle.hidden = sortedItems.length <= 5;
+    expandToggle.setAttribute("aria-expanded", state.statsItemsExpanded ? "true" : "false");
+    if (expandLabel) expandLabel.textContent = state.statsItemsExpanded ? "收合" : `顯示其餘 ${overflow} 筆`;
+  }
 }
 
 function renderPieChart(rows, totals, total) {
@@ -1330,7 +1395,7 @@ function renderPieChart(rows, totals, total) {
         ${slices}
         <circle class="pie-hole" cx="100" cy="100" r="48"></circle>
         <text class="pie-caption" x="100" y="88">支出分佈</text>
-        <text class="pie-center" x="100" y="106">${escapeHtml(compactCurrency(total))}</text>
+        <text class="pie-center" x="100" y="106">${escapeHtml(formatCurrency(total))}</text>
       </svg>
       <div class="pie-legend">${legend}</div>
     </div>
@@ -1341,6 +1406,8 @@ function renderDailyStats(expenseItems) {
   const daily = dailyTotals(expenseItems);
   const max = Math.max(...daily.map((item) => item.amount), 0);
   els.statsCount.textContent = daily.length ? `${daily.length} 天` : "";
+  const statsExpandToggle = $("#statsExpandToggle");
+  if (statsExpandToggle) statsExpandToggle.hidden = true;
 
   if (!daily.length) {
     els.chartCanvas.removeAttribute("role");
@@ -1885,21 +1952,21 @@ function formatDateTime(value) {
 }
 
 function formatCurrency(value) {
-  return `NT$${new Intl.NumberFormat("zh-TW", {
+  return `$${new Intl.NumberFormat("zh-TW", {
     maximumFractionDigits: 0
   }).format(value || 0)}`;
 }
 
 function formatTwdRate(value) {
   const amount = Number(value) || 0;
-  return `NT$${new Intl.NumberFormat("zh-TW", {
+  return `$${new Intl.NumberFormat("zh-TW", {
     minimumFractionDigits: amount < 1 ? 3 : 0,
     maximumFractionDigits: amount < 1 ? 4 : 2
   }).format(amount)}`;
 }
 
 function compactCurrency(value) {
-  return `NT$${new Intl.NumberFormat("zh-TW", {
+  return `$${new Intl.NumberFormat("zh-TW", {
     notation: "compact",
     maximumFractionDigits: 1
   }).format(value || 0)}`;

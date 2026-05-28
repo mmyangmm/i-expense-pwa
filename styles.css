@@ -633,7 +633,7 @@ h1 {
 
 .pie-center {
   fill: var(--text);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 900;
   text-anchor: middle;
   dominant-baseline: central;
@@ -1204,16 +1204,25 @@ h1 {
   left: 50%;
   bottom: calc(82px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  min-width: 112px;
-  min-height: 52px;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
   border: 0;
-  border-radius: 999px;
+  border-radius: 50%;
   background: linear-gradient(135deg, var(--primary-bright), var(--primary-2));
   color: #fff;
-  font-size: 17px;
   font-weight: 900;
   box-shadow: 0 16px 28px rgb(217 54 114 / 32%);
   z-index: 5;
+}
+
+.fab-plus {
+  font-size: 36px;
+  line-height: 1;
+  font-weight: 300;
+  display: block;
+  margin-top: -2px;
 }
 
 .tabbar {
@@ -1616,6 +1625,16 @@ dialog::backdrop {
   cursor: not-allowed;
 }
 
+/* 儲存鍵：只剩勾勾，圖示置中放大 */
+.save-key-icon-only {
+  grid-template-rows: 1fr;
+}
+
+.save-key-icon-only .action-icon {
+  width: 32px;
+  height: 32px;
+}
+
 .mic-key {
   background: linear-gradient(135deg, #4ecdc4, #44cf6c);
 }
@@ -1736,6 +1755,82 @@ dialog::backdrop {
   }
 }
 
+/* ---- List 展開 / 收合按鈕（最近記錄、品項排行） ---- */
+
+.list-expand-toggle {
+  margin-top: 10px;
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.list-expand-toggle:hover,
+.list-expand-toggle:focus-visible {
+  background: var(--primary-light);
+  outline: none;
+  filter: brightness(0.97);
+}
+
+.list-expand-chevron {
+  font-size: 14px;
+  transition: transform 200ms ease;
+}
+
+.list-expand-toggle[aria-expanded="true"] .list-expand-chevron {
+  transform: rotate(180deg);
+}
+
+/* ---- 快速記帳：備註 + 日期欄位 ---- */
+
+.entry-meta-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: var(--surface-soft);
+  margin-top: 12px;
+}
+
+.entry-meta-field {
+  display: grid;
+  gap: 4px;
+}
+
+.entry-meta-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.entry-note-input,
+.entry-date-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.entry-note-input:focus,
+.entry-date-input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
 /* ---- Collapsible reveal: cloud-user → sign out, settings-card-head → list ---- */
 
 .cloud-user {
@@ -1793,8 +1888,14 @@ dialog::backdrop {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* 雲端動作 — 登入 / 同步 各佔一行並置中（隱藏的按鈕不留位置） */
 .cloud-actions {
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+
+.cloud-actions > .settings-action {
+  width: min(280px, 100%);
 }
 
 /* Danger button (red bg/text) — used by logout & clear data */
