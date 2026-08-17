@@ -488,10 +488,11 @@ function renderConverter() {
             <span class="currency-code-line">${escapeHtml(code)}${isBase ? " · 基準" : ""}</span>
           </div>
         </div>
-        <div class="converter-controls" aria-label="${escapeAttr(`${currency.name} 排序與刪除`)}">
+        <div class="converter-controls" aria-label="${escapeAttr(`${currency.name} 排序、刪除與清除`)}">
           <button class="row-tool" data-move="up" data-code="${escapeAttr(code)}" type="button" ${index === 0 ? "disabled" : ""} aria-label="上移 ${escapeAttr(currency.name)}">↑</button>
           <button class="row-tool" data-move="down" data-code="${escapeAttr(code)}" type="button" ${index === codes.length - 1 ? "disabled" : ""} aria-label="下移 ${escapeAttr(currency.name)}">↓</button>
           <button class="row-tool danger-tool" data-remove="${escapeAttr(code)}" type="button" ${isBase || codes.length <= 2 ? "disabled" : ""} aria-label="刪除 ${escapeAttr(currency.name)}">×</button>
+          <button class="row-tool clear-tool" data-clear="${escapeAttr(code)}" type="button" aria-label="清除 ${escapeAttr(currency.name)} 暫存金額">C</button>
         </div>
         <label class="converter-input-wrap">
           <span>${escapeHtml(currency.symbol)}</span>
@@ -535,6 +536,10 @@ function bindConverterRows() {
 
   $$("[data-remove]").forEach((button) => {
     button.addEventListener("click", () => removeConverterCurrency(button.dataset.remove));
+  });
+
+  $$("[data-clear]").forEach((button) => {
+    button.addEventListener("click", () => clearConverterAmount(button.dataset.clear));
   });
 }
 
@@ -618,6 +623,18 @@ function removeConverterCurrency(code) {
   state.settings.converterCurrencies = codes.filter((item) => item !== target);
   saveSettings();
   renderConverter();
+}
+
+function clearConverterAmount(code) {
+  const target = currencyInfoFor(code).code;
+  const input = document.querySelector(`.converter-input[data-code="${cssEscape(target)}"]`);
+  state.settings.converterBase = target;
+  state.settings.converterAmount = "";
+  if (input) input.value = "";
+  saveSettings();
+  updateConverterBaseState();
+  updateConverterAmounts();
+  input?.focus();
 }
 
 function renderNotificationSettings() {

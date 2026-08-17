@@ -1059,13 +1059,18 @@ h1 {
 }
 
 .converter-controls {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   gap: 6px;
   padding-left: 54px;
+  min-width: 0;
 }
 
 .row-tool {
+  position: relative;
   min-width: 34px;
+  width: 34px;
   height: 34px;
   border: 0;
   border-radius: 50%;
@@ -1075,6 +1080,13 @@ h1 {
   box-shadow: var(--shadow-soft);
 }
 
+.row-tool::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+}
+
 .row-tool:disabled {
   opacity: 0.32;
   cursor: not-allowed;
@@ -1082,6 +1094,10 @@ h1 {
 
 .danger-tool {
   color: var(--danger);
+}
+
+.clear-tool {
+  color: var(--muted);
 }
 
 .converter-input-wrap {
